@@ -5,6 +5,9 @@ Spyder Editor
 This is a temporary script file.
 """
 
+#outputs to another folder in the same directory as the raw data folder, called 2_normalized
+
+
 import os 
 from pathlib import Path
 import numpy as np
@@ -20,25 +23,27 @@ normWn = '723'
 
 specCounter = 0
 
-
+#retrieves the csv file containing the replicates for each sample. splits into wn col and data columns
 def getSpec(fileNm):
     file = np.loadtxt(dateFolder / fileNm, delimiter=',')
     wns = file[:,0]
     allSpec = np.delete(file, 0, 1)
     return wns, allSpec
 
-
+#picks peaks and find the index of the peak closest to the specified wavenumber peak (normWn)
 def getNormPeak(wns, spectrum):
     specPksAllInd, _ = find_peaks(spectrum)
     normPkInd = min(specPksAllInd, key=lambda x:abs(wns[x]-float(normWn)))
     return normPkInd
 
+#divides by the value of the normalization peak
 def getNormSpectrum(normPkInd, wns, spectrum): 
     normDiv = spectrum[normPkInd]
     normSpec = np.divide(spectrum, normDiv)
     
     return normSpec
 
+#plots normalization to do a quick visual check 
 def plotNormSpec(wns, spectrum, normPkInd, file):
     figSpectrum, specX = plt.subplots(figsize=(10,5))
     specLine, = specX.plot(wns, spectrum, c='red', label=str(file), linewidth=0.5)
@@ -46,14 +51,16 @@ def plotNormSpec(wns, spectrum, normPkInd, file):
     specX.legend()
     return
 
-def plotCheck(wns, spectrum):
-    figSpectrum, specX = plt.subplots(figsize=(10,5))
-    specLine, = specX.plot(wns, spectrum, c='red', label='check', linewidth=0.5)
+# def plotCheck(wns, spectrum):
+#     figSpectrum, specX = plt.subplots(figsize=(10,5))
+#     specLine, = specX.plot(wns, spectrum, c='red', label='check', linewidth=0.5)
 
 #normalize loop
 for chFolder in blFTIRFolder.iterdir():
+    #creates output folder 
     chamberOutFolder = parentDir / folderNm / "2_normalized" / str(normWn) /str(str(chFolder).split('\\')[-1:][0])
     for dateFolder in chFolder.iterdir():
+        #creates date output folder 
         dateOutFolder = chamberOutFolder / str(str(str(dateFolder).split('\\')[-1:][0]))
         dateOutFolder.mkdir(parents=True, exist_ok=True)
         for filename in os.listdir(dateFolder):

@@ -24,6 +24,8 @@ Created on Mon Sep  8 13:52:09 2025
     #SideID should be "Air" or "Back" exactly 
     #R is replicate number, likely 1-4
     
+#this puts replicates together into one csv with multiple columns (one wavenumber column and x replicate columns)    
+    
 #outputs to another folder in the same directory as the raw data folder, called 1_baseline-corrected
 #currently, working on data in C:\Users\klj\OneDrive - NIST\Projects\PV-Project\Reciprocity\FTIR-data-PET-exposure
 

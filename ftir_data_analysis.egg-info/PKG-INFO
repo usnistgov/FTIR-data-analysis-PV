@@ -1,0 +1,8 @@
+Metadata-Version: 2.4
+Name: ftir_data_analysis
+Version: 0.1.0
+Summary: Add your description here
+Requires-Python: >=3.13
+Description-Content-Type: text/markdown
+Requires-Dist: matplotlib>=3.10.6
+Requires-Dist: scipy>=1.16.1

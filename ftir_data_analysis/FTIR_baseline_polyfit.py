@@ -64,7 +64,6 @@ def getSets(folder):
     sets = []
     for i in range(1, len(os.listdir(folder))):    
         if os.listdir(folder)[i][:-6] == setList[0][:-6]:
-            print(setList[0][:-6])
             setList.append(os.listdir(folder)[i])
         else: 
             sets.append(setList)
@@ -155,7 +154,7 @@ def plotBaseline(wns, spectrum, baseline, blCorr, minsInd, blYVals, file):
     return
 
     #baseline loop
-def baselineLoop(
+def baselinePolyFitLoop(
         directory,
         folderNm='FTIR-data-PET-exposure',
         blFileNm='PET-baseline-wns-fit.txt',

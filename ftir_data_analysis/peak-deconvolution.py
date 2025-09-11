@@ -281,8 +281,8 @@ peakDict = createPeakDict(startStopList)
 skipList = []
 timeoutList = []
 
-fitOneFile("chamber-5", "20250804-1171h")
+#fitOneFile("chamber-5", "20250804-1171h")
 
 #enter start and stop hours for fitting a range of date folders
-#fitMultiFiles(1393, 1393)
+fitMultiFiles(1393, 1393)
 print(timeoutList)

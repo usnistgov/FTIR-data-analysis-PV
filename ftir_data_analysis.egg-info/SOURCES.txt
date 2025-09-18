@@ -1,6 +1,8 @@
 README.md
 pyproject.toml
 ftir_data_analysis/1_FTIR-normalize.py
+ftir_data_analysis/FTIR_baseline_polyfit-older.py
+ftir_data_analysis/FTIR_baseline_polyfit-one-folder.py
 ftir_data_analysis/FTIR_baseline_polyfit.py
 ftir_data_analysis/peak-deconvolution.py
 ftir_data_analysis.egg-info/PKG-INFO

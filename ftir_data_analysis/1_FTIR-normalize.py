@@ -58,10 +58,20 @@ def normalizeLoop(
         filtersFileNm = "filters-pct-T.csv"
         ):
     specCounter = 0
+    fileCounter = 0
     np.set_printoptions(suppress=True)
     parentDir=Path(directory)
     blFTIRFolder = parentDir / folderNm / blFTIRFileNm
     filterListPath = parentDir / filtersFileNm
+    
+    for chFolder in blFTIRFolder.iterdir():
+        for dateFolder in chFolder.iterdir():
+            for filename in os.listdir(dateFolder):
+                fileCounter +=1
+    #just for progress tracking:
+    totalFiles = fileCounter 
+    fileCounter = 0
+    print(totalFiles)
     
     for chFolder in blFTIRFolder.iterdir():
         #creates output folder 
@@ -71,7 +81,9 @@ def normalizeLoop(
             dateOutFolder = chamberOutFolder / str(str(str(dateFolder).split('\\')[-1:][0]))
             dateOutFolder.mkdir(parents=True, exist_ok=True)
             for filename in os.listdir(dateFolder):
-                print(filename)
+                #print(filename)
+                fileCounter+=1
+                print(f'\r processing {str(fileCounter)} out of {str(totalFiles)} files, {str(round((fileCounter/totalFiles *100), 1))}% ', end=' ')
                 wavenumbers, blCorrSet = getSpec(filename, dateFolder)
                 rows, columns = blCorrSet.shape
                 normSet = np.array([])
@@ -80,7 +92,7 @@ def normalizeLoop(
                     blCorrSpec = blCorrSet[:,i]
                     normPeakInd = getNormPeak(wavenumbers, blCorrSpec, normWn)
                     normSpectrum = getNormSpectrum(normPeakInd, wavenumbers, blCorrSpec)
-                    plotNormSpec(wavenumbers, normSpectrum, normPeakInd, filename)
+                    #plotNormSpec(wavenumbers, normSpectrum, normPeakInd, filename)
                     if np.any(normSet)==False:
                         normSet = normSpectrum
                     else:
@@ -96,7 +108,7 @@ def normalizeLoop(
                 np.savetxt(outputSetPath, outputSetFile, '%5.7f', delimiter=',')
                 np.savetxt(outputAvgPath, outputAvgFile, '%5.7f', delimiter=',')
     
-    print(specCounter)       
+    print(f'\n Done. \n total individual spectra: {str(specCounter)}')       
 
 if __name__ == "__main__":          #does not run if importing only if running
     normalizeLoop("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity")

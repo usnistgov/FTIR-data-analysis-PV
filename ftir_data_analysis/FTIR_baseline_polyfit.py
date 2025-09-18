@@ -5,6 +5,21 @@ Created on Wed Sep 17 14:21:19 2025
 @author: klj
 """
 
+##uses a baseline anchor points file (txt) to automate baseline
+##correction for bulk FTIR data. Works by finding minima in spectra and finding a set of 
+## closest to the baseline anchor point starting values. The baseline created is 
+##a polynomial fit. Remember that some distorion of peaks will be inevitable with any baseline
+##correction.
+
+#REQUIREMENTS
+## - This currently requires all data to be the same spacing and range as each other, but not 
+##   necessarily the same as the data it was written for. 
+## - Currently configured for data that HAS replicates. Replicates in filename must be separated from
+##   the rest of the file name with a single underscore (_) and must be the last character(s) before the 
+##   file extension, e.g. date-fileID_1.csv, date-fileID_2.csv, etc. 
+##   currently configured for csv files with x wavenumber and y intensity values, in absorbance format, 
+##   with positive peaks. 
+
 import os #needed for os.walk
 from pathlib import Path 
 import numpy as np

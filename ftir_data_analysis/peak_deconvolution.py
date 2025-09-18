@@ -80,7 +80,7 @@ def createPeakDict(ssList):
         startWn, stopWn = ssList[j][0], ssList[j][1]
         pkPrmFilePath = parentDir / folderNm / ("peak-params_" + startWn + "-" + stopWn + "-N" + str(normWn) + ".csv")
         pkPrmsTbl = np.loadtxt(pkPrmFilePath, skiprows=1, delimiter=",")
-        print(pkPrmsTbl[:,1])
+        #print(pkPrmsTbl[:,1])
         for wn in pkPrmsTbl[:,1]:
             peakDictionary[ind] = str(int(wn))
             ind+=1
@@ -186,7 +186,7 @@ def plotFitCheck(initGuessList, paramsFit, xSec, ySec, file):
 
 
 #ACTUAL PROCESS
-def fitOneFile(chFolder, dateFolder):
+def fitOneFile(chFolder, dateFolder, totalFiles, fileCounter):
     directory = normFTIRFolder / str(normWn) / chFolder / dateFolder  
     chamberOutFolder = parentDir / folderNm / "3_fit-results" / normWn / str(str(chFolder).split('\\')[-1:][0])
     chamberFigOutFolder = parentDir / folderNm / "x_deconv-figs" / normWn / str(str(chFolder).split('\\')[-1:][0])
@@ -194,6 +194,7 @@ def fitOneFile(chFolder, dateFolder):
     chamberFigOutFolder.mkdir(parents=True, exist_ok=True)      #creates folder if it doesn't exist 
     
     for file in directory.iterdir(): 
+        
         filename = str(file).split('\\')[-1]
         pos = filename.split("-")[2]
         expHrs = filename.split('-')[3]
@@ -205,6 +206,9 @@ def fitOneFile(chFolder, dateFolder):
             blPoints = np.loadtxt(blFilePath, delimiter=" ")
             yZeros = getMins(wavenumbers, dataSet[:,1], blPoints)
             xAll = wavenumbers
+            
+            fileCounter+=1
+            print(f'\r processing {str(fileCounter)} out of {str(totalFiles)} files, {str(round((fileCounter/totalFiles *100), 1))}% ', end=' ')
     
             for i in range(4):
                 yAll = dataSet[:,i]
@@ -233,21 +237,36 @@ def fitOneFile(chFolder, dateFolder):
                 #adding column headers 
                 outDf = pd.DataFrame(allParams, columns=columnsList)
                 
-                print(f"fitting file: {filename}")
+                #print(f"fitting file: {filename}")
                 outParamsFileName = filename[:-4].replace(' ', '') + f"-fit_{i+1}.csv"
                 outputPath = chamberOutFolder / dateFolder 
                 outputPath.mkdir(parents=True, exist_ok=True)
                 outDf.to_csv(outputPath / outParamsFileName, index=False)
+    return fileCounter
 
 def fitMultiFiles(startHours, endHours):
     #just for progress count
     setCount = 0
     currentCount = 0 
+    fileCounter = 0
+    
+    #just counting files for tracking
+    for chFolder in normFolder.iterdir():
+        for dateFolder in chFolder.iterdir():
+            expHrs = int(str(dateFolder).split("\\")[-1].split("-")[-1].replace("h", ""))
+            if expHrs >= startHours and expHrs <= endHours:  
+                fileCounter+= len(list(dateFolder.glob("*Avg.csv")))
+                #print(f' number of files in dateFolder: {len(list(dateFolder.glob("*.csv")))}')
+    
+    totalFileCount = fileCounter
+    fileCounter = 0
+    
+    #actual loop
     for chFolder in normFolder.iterdir():
         for dateFolder in chFolder.iterdir():
             expHrs = int(str(dateFolder).split("\\")[-1].split("-")[-1].replace("h", ""))
             if expHrs >= startHours and expHrs <= endHours: 
-                print(expHrs)
+                #print(expHrs)
                 setCount +=1
     for chFolder in normFolder.iterdir():
         chFolderNm = str(chFolder).split("\\")[-1]
@@ -256,16 +275,18 @@ def fitMultiFiles(startHours, endHours):
             expHrs = int(str(dateFolder).split("\\")[-1].split("-")[-1].replace("h", ""))
             if expHrs >= startHours and expHrs <= endHours:    
                 currentCount +=1
-                print(f"processing set {currentCount} of {setCount}. {round(((currentCount-1)/setCount)*100, 1)}% complete")
+                #print(f'\r processing set {currentCount} of {setCount}. {round(((currentCount-1)/setCount)*100, 1)}% complete', end=' ')
                 try:
-                    fitOneFile(chFolderNm, dateFolderNm)
+                    fileCounter = fitOneFile(chFolderNm, dateFolderNm, totalFileCount, fileCounter)
                 except RuntimeError:
                     timeoutList.append((str(chFolder).split("\\")[-1], str(dateFolder).split("\\")[-1]))
-                    print(timeoutList)
+                    print('\r' + str(timeoutList))
                     pass
 
 folderNm='FTIR-data-PET-exposure'  
-parentDir = Path().absolute().parent
+directory = "C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity"
+parentDir = Path(directory)
+#parentDir = Path().absolute().parent
 blFilePath = parentDir / folderNm / 'PET-baseline-wns.txt'
 normFTIRFolder = parentDir / folderNm / "2_normalized" 
 normWn = '723'
@@ -276,6 +297,7 @@ fontString = "Palatino Linotype"
 startStopList = [['565', '742'],['1517', '1900']]       #define regions for fitting in wns
 
 peakDict = createPeakDict(startStopList)
+print(peakDict)
 
 #skipList = [("chamber-5", "226h")]
 skipList = []
@@ -284,5 +306,5 @@ timeoutList = []
 #fitOneFile("chamber-5", "20250804-1171h")
 
 #enter start and stop hours for fitting a range of date folders
-fitMultiFiles(1393, 1393)
-print(timeoutList)
+fitMultiFiles(0, 1393)
+print('\n' + str(timeoutList))

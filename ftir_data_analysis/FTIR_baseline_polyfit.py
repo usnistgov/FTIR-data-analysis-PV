@@ -98,7 +98,7 @@ def plotBaseline(wns, spectrum, baseline, blCorr, minsInd, blYVals, file):
 def baselinePolyFitLoop(
         rawDataDir, 
         polyFitPower = 3, 
-        blOutFolderNm = "1_baseline-corrected_TEST",
+        blOutFolderNm = "1_baseline-corrected",
         blFileNm='PET-baseline-wns-fit.txt',
         showPlots=False,
         ):
@@ -158,9 +158,10 @@ def baselinePolyFitLoop(
                     else:
                           dataSet = np.column_stack((dataSet, blCorrSpec))
             
-            outputFile = np.column_stack((wavenumbers, dataSet))
+                outputFile = np.column_stack((wavenumbers, dataSet))
             #creates output path for each new file. 
-            outputFilepath = outputFolder / str('_'.join(filename.split('_')[:-1]) + '_blCorr.csv')
+                outputFilepath = outputFolder / str('_'.join(filename.split('_')[:-1]) + '_blCorr.csv')
+                np.savetxt(outputFilepath, outputFile, '%5.7f', delimiter=',')
 
 
 

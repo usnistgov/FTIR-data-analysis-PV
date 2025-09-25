@@ -1,10 +1,7 @@
 [project]
-name = "ftir_data_analysis"
+name = "ftir-data-analysis-pv"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.9"
-dependencies = [
-    "matplotlib",
-    "scipy>=1.14.0",
-]
+requires-python = ">=3.13"
+dependencies = []

@@ -1,2 +1,0 @@
-matplotlib
-scipy>=1.14.0

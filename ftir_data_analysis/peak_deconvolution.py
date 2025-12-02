@@ -91,7 +91,7 @@ def createPeakDict(ssList):
 #indefinite number of args so that number of peaks can change fluidly 
 def gauss_function_multi(x, *args):
     total_val = 0
-    
+
     for i in range(int(len(args) / 4)):
         x0n   = args[i*4 + 0]
         An    = args[i*4 + 1]
@@ -114,6 +114,7 @@ def fitSection(start, stop, xSec, ySec):
         heightsList.append(peakHeight)   
     heights = np.array([heightsList])
     paramsFitArr = np.resize(paramsFit, (numPeaks,4))
+    print(paramsFitArr)
     paramsFitArr = np.concatenate((paramsFitArr, heights.T), axis=1)
     return initGuess, bounds, paramsFit, pcov, paramsFitArr
 
@@ -248,6 +249,7 @@ def fitMultiFiles(startHours, endHours):
     #just for progress count
     setCount = 0
     currentCount = 0 
+    totalFileCount = 0
     fileCounter = 0
     
     #just counting files for tracking
@@ -255,26 +257,24 @@ def fitMultiFiles(startHours, endHours):
         for dateFolder in chFolder.iterdir():
             expHrs = int(str(dateFolder).split("\\")[-1].split("-")[-1].replace("h", ""))
             if expHrs >= startHours and expHrs <= endHours:  
-                fileCounter+= len(list(dateFolder.glob("*Avg.csv")))
+                totalFileCount+= len(list(dateFolder.glob(f"*Air_N{normWn}.csv")))
                 #print(f' number of files in dateFolder: {len(list(dateFolder.glob("*.csv")))}')
     
-    totalFileCount = fileCounter
-    fileCounter = 0
-    
     #actual loop
-    for chFolder in normFolder.iterdir():
-        for dateFolder in chFolder.iterdir():
-            expHrs = int(str(dateFolder).split("\\")[-1].split("-")[-1].replace("h", ""))
-            if expHrs >= startHours and expHrs <= endHours: 
-                #print(expHrs)
-                setCount +=1
+    # for chFolder in normFolder.iterdir():
+    #     for dateFolder in chFolder.iterdir():
+    #         expHrs = int(str(dateFolder).split("\\")[-1].split("-")[-1].replace("h", ""))
+    #         if expHrs >= startHours and expHrs <= endHours: 
+    #             #print(expHrs)
+    #             setCount +=1
+                
     for chFolder in normFolder.iterdir():
         chFolderNm = str(chFolder).split("\\")[-1]
         for dateFolder in chFolder.iterdir():
             dateFolderNm = str(dateFolder).split("\\")[-1]
             expHrs = int(str(dateFolder).split("\\")[-1].split("-")[-1].replace("h", ""))
             if expHrs >= startHours and expHrs <= endHours:    
-                currentCount +=1
+                #fileCounter += len(list(dateFolder.glob("*Avg.csv")))
                 #print(f'\r processing set {currentCount} of {setCount}. {round(((currentCount-1)/setCount)*100, 1)}% complete', end=' ')
                 try:
                     fileCounter = fitOneFile(chFolderNm, dateFolderNm, totalFileCount, fileCounter)
@@ -297,14 +297,14 @@ fontString = "Palatino Linotype"
 startStopList = [['565', '742'],['1517', '1900']]       #define regions for fitting in wns
 
 peakDict = createPeakDict(startStopList)
-print(peakDict)
+
 
 #skipList = [("chamber-5", "226h")]
 skipList = []
 timeoutList = []
 
-#fitOneFile("chamber-5", "20250804-1171h")
+#fitOneFile("chamber-1", "20250804-1171h")
 
 #enter start and stop hours for fitting a range of date folders
-fitMultiFiles(0, 1393)
+fitMultiFiles(1393, 1393)
 print('\n' + str(timeoutList))

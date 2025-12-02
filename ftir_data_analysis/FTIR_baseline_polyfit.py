@@ -1,3 +1,5 @@
+#%%
+
 # -*- coding: utf-8 -*-
 """
 Created on Wed Sep 17 14:21:19 2025
@@ -167,7 +169,7 @@ def baselinePolyFitLoop(
 
 if __name__ == "__main__":          #does not run if importing only if running
     baselinePolyFitLoop("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure/0_raw-data")    
-    
+    #baselinePolyFitLoop("//cfs2e.nist.gov/73_EL/731/internal/CONFOCAL/FS2/Data4/Hsiuchin/reciprocity experiment (3M PET)/FTIR/cutoff 305/KLJ-processing/0_raw-data", showPlots=True)    
     
         
 #print(depth)

@@ -114,7 +114,7 @@ def fitSection(start, stop, xSec, ySec):
         heightsList.append(peakHeight)   
     heights = np.array([heightsList])
     paramsFitArr = np.resize(paramsFit, (numPeaks,4))
-    print(paramsFitArr)
+    #print(paramsFitArr)
     paramsFitArr = np.concatenate((paramsFitArr, heights.T), axis=1)
     return initGuess, bounds, paramsFit, pcov, paramsFitArr
 
@@ -220,9 +220,9 @@ def fitOneFile(chFolder, dateFolder, totalFiles, fileCounter):
                     startIndex, stopIndex, xSection, ySection = getSection(wavenumbers, yAll, yZeros, xStartWn, xStopWn)
                     initGuess_multi, bounds_multi, popt_multi, pcov_multi, resultsArr = fitSection(xStartWn, xStopWn, xSection, ySection)
                     
-                    if j!=0: #this is just to skip plotting the first setion, 565-742, in the preview window, since this section's fit is relatively straightforward. 
+                    # if j!=0: #this is just to skip plotting the first setion, 565-742, in the preview window, since this section's fit is relatively straightforward. 
                         #plotFit(initGuess_multi, popt_multi, xSection, ySection, filename)
-                        plotFitCheck(initGuess_multi, popt_multi, xSection, ySection, filename)
+                        # plotFitCheck(initGuess_multi, popt_multi, xSection, ySection, filename)
                     if j == 0:  #create the array for the fit results (for the first section)
                         allParams = resultsArr
                     else:   # add to the array for the fit results (for all following sections)
@@ -306,5 +306,5 @@ timeoutList = []
 #fitOneFile("chamber-1", "20250804-1171h")
 
 #enter start and stop hours for fitting a range of date folders
-fitMultiFiles(1393, 1393)
+fitMultiFiles(1681, 1681)
 print('\n' + str(timeoutList))

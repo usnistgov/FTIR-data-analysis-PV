@@ -1,6 +1,16 @@
 # -*- coding: utf-8 -*-
 """
-Created on Mon Feb 10 11:12:48 2025
+
+accepts data csvs output by peak deconvolution script. 
+input data organized as (parent directory)/3_fit-results/(normalization wavenumber)/chamber-(x)/YYYYMMDD-(z)h/YYYYMMDD_(sample material)-Ch(x)-Pos(y)-(z)h-Air_(norm wn)-fit_(replicate).csv
+e.g. 3_fit-results/723/chamber-1/20250110-0h/20250110_PET-Ch1-Pos1-0h-Air_N723-fit_1.csv
+
+input data files are csvs laid out like so: 
+
+wavenumbers	area (N723)	FWHM	y int	height (N723)	divided Area (by630)	divided Area (by645)	...         divided Area (by1857)
+631.13...	0.222..	    6.55...	5.7e-45	0.031..	        1	                    0.146...                ...	        1.39...e+37
+654.09...	1.51...	    46.39.. 2.1e-46	0.03..	        6.8..	                1		                ...         9.48..e+37
+...         ...         ...     ...     ...             ...                     ...                     ...         ...
 
 @author: klj
 """
@@ -94,8 +104,6 @@ def createAvgStdFiles(
             
             for set in fileSets:  
                 setArray = np.array([importDataFunc(filename) for filename in set])
-                print(setArray.shape)
-                # fileSetDict[set[0][:(set[0].rfind('_'))]] = setArr  
                 filePrefix = set[0][:(set[0].rfind('_'))]
                 avgArray = setArray.mean(axis=0)  #wavenumbers included in average
                 stDevArray = setArray.std(axis=0, ddof=1)   #ddof is delta degrees of freedom. divisor n -ddof. using 1 since this is a sample not a population. https://numpy.org/devdocs/reference/generated/numpy.std.html 

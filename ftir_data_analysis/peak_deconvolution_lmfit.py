@@ -55,7 +55,11 @@ def getMins(wns, spectrum, blPts):
 #returns section of spectrum 
 def getSection(wns, spectrum, zeros, startWn, stopWn):
     startInd = min(zeros, key=lambda x:abs(float(startWn)-wns[x]))
+    if abs(wns[startInd] - float(startWn)) > 20:                                            #duct tape error handling for when the boundaries needed don't fit with the best baseline anchors when fitting a baseline
+        startInd = np.where(wns == (min(wns, key=lambda x: abs(float(startWn)-x))))[0][0]
     stopInd = min(zeros, key=lambda x:abs(float(stopWn)-wns[x]))
+    if abs(wns[stopInd] - float(stopWn)) > 20:                                              #duct tape error handling for when the boundaries needed don't fit with the best baseline anchors when fitting a baseline
+        stopInd = np.where(wns == (min(wns, key=lambda x: abs(float(stopWn)-x))))[0][0]
     xSubsection = wns[startInd:stopInd+1]
     ySubsection = spectrum[startInd:stopInd+1]
     return startInd, stopInd, xSubsection, ySubsection
@@ -105,7 +109,7 @@ def gauss_Area(x, wn, area, fwhm, c):
 # def gauss_Height(x, wn, amp, fwhm, c):
 #     return c + amp * np.exp(-0.5 * (((x-wn)**2)/(fwhm**2)))
 
-def residual(pars, x, data):
+def residual(pars, x, data): #lmfit requires set number of parameters for this function type to be passed into minimizer 
     numPks = int(len(pars)/4) #hard coded for 4 coeffs 
     model = gauss_Area(x, pars['p1_wn'], pars['p1_area'], pars['p1_fwhm'], pars['p1_c'])
     #model = Model(gauss_Area, prefix='p1_')
@@ -182,7 +186,7 @@ def fitOneFolder(
         blFileNm='PET-baseline-wns-fit.txt',
         normDataFolderNm = "2_normalized",
         fitOutFolderNm = "3_fit-results",
-        startStopList = [['1517', '1900']],
+        startStopList = [['565', '742'],['1517', '1900']],
         normWn = "723",
         totalFiles = 0, 
         fileCounter = 0
@@ -207,7 +211,7 @@ def fitOneFolder(
             for file in files:
                 if file.endswith('Avg.csv')==False: 
                     totalFiles +=1
-    print(f'total files for baseline correction: {totalFiles}')
+    print(f'total file sets for fitting: {totalFiles}')
     
     for root, dirs, files in os.walk(sourceFolder):
         depth = root.replace(str(directory), '').count(os.sep)
@@ -216,8 +220,8 @@ def fitOneFolder(
 
         #looping through files in target folder 
         for filename in files: 
-            #if filename.endswith('Avg.csv')==False:
-            if filename=="20250130_PET-Ch1-Pos2-81h-Air_N723.csv":    #single file for testing 
+            if filename.endswith('Avg.csv')==False:
+            #if filename=="20250130_PET-Ch1-Pos2-81h-Air_N723.csv":    #single file for testing 
 
                 wavenumbers, dataSet = getSpecSet(filename, sourceFolder)
                 yZeros = getMins(wavenumbers, dataSet[:,1], baselinePoints)
@@ -247,20 +251,22 @@ def fitOneFolder(
                  
                     columnsList = ['wavenumbers', 'area (N'+normWn+')', 'FWHM', 'y int'] #,'height (N'+normWn+')']   
                 
-                #dividing by all areas and adding as new columns
-                totalPeaks = allParams.shape[0]
-                for ind in range(totalPeaks):
-                    allParams, columnsList = divByPeak(allParams, ind, columnsList, peakDict)
+                    #dividing by all areas and adding as new columns
+                    totalPeaks = allParams.shape[0]
+                    for ind in range(totalPeaks):
+                        allParams, columnsList = divByPeak(allParams, ind, columnsList, peakDict)
 
-                #adding column headers, making into pandas dataframe for export
-                outDf = pd.DataFrame(allParams, columns=columnsList)
+                    #adding column headers, making into pandas dataframe for export
+                    outDf = pd.DataFrame(allParams, columns=columnsList)
                 
-                outFilename = filename[:-4].replace(' ', '') + f"-fit_{i+1}.csv"
-                outDf.to_csv(outputFolder / outFilename, index=False)
+                    outFilename = filename[:-4].replace(' ', '') + f"-fit_{i+1}.csv"
+                    outDf.to_csv(outputFolder / outFilename, index=False)
 
                 print(f'\r processing {str(fileCounter)} out of {str(totalFiles)} files, {str(round((fileCounter/totalFiles *100), 1))}% complete', end=' ')    #prints on one line
-    # return fileCounter
+    return fileCounter
+
+
     
-fitOneFolder("C:/Users/klj\OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure/2_normalized/723/chamber-1/20250130-81h", "C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure/0_raw-data")
+fitOneFolder("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure/2_normalized/723/chamber-5/20251125-2107h", "C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure/0_raw-data")
 
 #fitOneFolder("//Cfs2e.nist.gov/73_el/731/internal/CONFOCAL/FS2/Data4/Hsiuchin/reciprocity experiment (3M PET)/FTIR/cutoff 305/KLJ-processing/2_normalized/723/16h", "//cfs2e.nist.gov/73_EL/731/internal/CONFOCAL/FS2/Data4/Hsiuchin/reciprocity experiment (3M PET)/FTIR/cutoff 305/KLJ-processing/0_raw-data")

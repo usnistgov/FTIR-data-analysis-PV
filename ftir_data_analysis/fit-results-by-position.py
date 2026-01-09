@@ -16,12 +16,21 @@ wavenumbers	area (N723)	FWHM	y int	height (N723)	divided Area (by630)	divided Ar
 """
 
 
-import os, itertools  #os needed for os.walk. itertools allows for listcomprehension, speficially itertools.groupby allows easy grouping of replicate files 
+import os, itertools        #os needed for os.walk. itertools allows for listcomprehension, speficially itertools.groupby allows easy grouping of replicate files 
 from pathlib import Path
 import numpy as np
-import shutil
+import shutil               #for copying files 
+import re                   #regular expressions for list comprehension and string parsing 
 
 np.set_printoptions(suppress=True)
+
+def getPosition(file):
+    return int(re.sub('[a-zA-Z]+', '', file.split('-')[2]))
+
+def getChamber(file):
+    return int(re.sub('[a-zA-Z]+', '', file.split('-')[1]))
+
+
 
 #make list of chamber folders 
 def makeChamberFolderList(dataSourceFolder):
@@ -104,7 +113,9 @@ def createAvgStdFiles(
             
             for set in fileSets:  
                 setArray = np.array([importDataFunc(filename) for filename in set])
+                print(setArray.shape)
                 filePrefix = set[0][:(set[0].rfind('_'))]
+
                 avgArray = setArray.mean(axis=0)  #wavenumbers included in average
                 stDevArray = setArray.std(axis=0, ddof=1)   #ddof is delta degrees of freedom. divisor n -ddof. using 1 since this is a sample not a population. https://numpy.org/devdocs/reference/generated/numpy.std.html 
                 avgPosFolder, stdPosFolder = avgStdPosFolder / 'Average', avgStdPosFolder / 'StDev'
@@ -112,8 +123,12 @@ def createAvgStdFiles(
                 stdPosFolder.mkdir(parents=True, exist_ok=True)
                 np.savetxt(avgPosFolder / f"{filePrefix}_Avg.csv", avgArray, delimiter=',', header=columnNames, comments='')
                 np.savetxt(stdPosFolder / f"{filePrefix}_StDev.csv", stDevArray, delimiter=',', header=columnNames, comments='')
+
+
+
                 
 
 if __name__ == "__main__":          #does not run if importing only if running
     fitByPosition("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure/0_raw-data")    
-    createAvgStdFiles("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure/0_raw-data")    
+    # createAvgStdFiles("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure/0_raw-data")    
+    

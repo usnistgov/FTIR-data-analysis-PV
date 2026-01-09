@@ -13,6 +13,10 @@ import matplotlib.pyplot as plt
 import re #regular expressions for list comprehension and string parsing 
 #import math
 
+
+def getPosition(file):
+    return int(re.sub('[a-zA-Z]+', '', file.split('-')[2]))
+
 #when plotting by filters, sorts files for iterating into order grouped by filter level to make plotting easier/nicer. 
 def filterSort(
         chFiles 
@@ -96,7 +100,10 @@ def plotChambers(
     normWn = '723',
     propertyFolder = 'area_N723', #TO-DO: remove hard coding 
     filtersFile = None,
-    filtersHandling = True
+    filtersHandling = True,
+    xValue = 'dose',
+    plotDarkPos = False,
+    xCols = 3
     ):
     #setting up useful paths
     rawDataFolder = Path(rawDataDir)
@@ -114,37 +121,39 @@ def plotChambers(
         #should do this sequence below once for each chamber. 
 
         if len(files)!=0 and root.split('\\')[-1] == 'Average' and root.split('\\')[-2] == propertyFolder: #only going through the terminal level folders named averages
-
-            wavenumbers = (np.genfromtxt(Path(root) / files[0], delimiter=',', names=True, max_rows=1).dtype.names) #retrieving column names. genfromtxt stores column names as dtype. skips column header for expHrs
-            peakWn = min(wavenumbers[2:], key=lambda x: abs(int(x)-inputPkWn))        #find closest wavenumber in data to input peak wavenumber 
-            yColInd = wavenumbers.index(peakWn)                                       #uses input peak number to find data column
-
+            #finding y column
+            dataColHeaders = (np.genfromtxt(Path(root) / files[0], delimiter=',', names=True, max_rows=1).dtype.names) #retrieving column names. genfromtxt stores column names as dtype. skips column header for expHrs
+            peakWn = min(dataColHeaders[xCols:], key=lambda x: abs(int(x)-inputPkWn))        #find closest wavenumber in data to input peak wavenumber 
+            yColInd = dataColHeaders.index(peakWn)                                       #uses input peak number to find data column
+            xColInd = dataColHeaders.index(xValue)
+            
             figure, chamberPlot = plt.subplots(figsize=(6, 6), dpi=300)                 #create chamber plot
             
             #need to move filters Array somewhere it can be turned on and off 
             sortedFiles = filterSort(files) if filtersHandling==True else files                          #sort files by filter grouping before iterating to simplify
+            sortedFiles = [file for file in sortedFiles if float(getPosition(file)) != 1] if plotDarkPos == False else sortedFiles       #remove position 1 if plotDarkPos == False
             allPositions = [float(re.sub('[a-zA-Z]+', '', file.split('-')[2])) for file in files]
 
             for file in sortedFiles:
-                #removes position 1 when plotting by dose. should come up with a way to easily include this when plotting by exp time
-                if float(re.sub('[a-zA-Z]+', '', file.split('-')[2])) != 1:
 
-                    avgPath = Path(root) / file
-                    stDevPath = Path(str(root).replace('Average', 'StDev')) / file.replace('Avg', 'StDev')
+                avgPath = Path(root) / file
+                stDevPath = Path(str(root).replace('Average', 'StDev')) / file.replace('Avg', 'StDev')
 
-                    avgsArray = np.loadtxt(avgPath, delimiter=',', skiprows=1)
-                    stDevArray = np.loadtxt(stDevPath, delimiter=',', skiprows=1)
-                    
-                    xColData = avgsArray[:, 1]
-                    yColData = avgsArray[:,yColInd]
+                avgsArray = np.loadtxt(avgPath, delimiter=',', skiprows=1)
+                stDevArray = np.loadtxt(stDevPath, delimiter=',', skiprows=1)
+                
+                xColData = avgsArray[:,xColInd]
+                yColData = avgsArray[:,yColInd]
+                stdDevData = stDevArray[:,yColInd]
 
-                    # formatData(file, root, propertyFolder, peakWn, filtersArray, filtersColNames)
-                    plotColor, fillStyle, legendText = formatData(file, root, allPositions, filtersHandling)
-                    chamberPlot.plot(xColData, yColData,
-                                    linestyle='-', 
-                                    color=plotColor, markeredgecolor=plotColor, markerfacecolor=plotColor,
-                                    marker='o', fillstyle=fillStyle, markersize= 12, 
-                                    label=legendText)
+                # formatData(file, root, propertyFolder, peakWn, filtersArray, filtersColNames)
+                lineColor, fillStyle, legendText = formatData(file, root, allPositions, filtersHandling)
+                chamberPlot.plot(xColData, yColData,
+                                linestyle='-', 
+                                color=lineColor, markeredgecolor=lineColor, markerfacecolor=lineColor,
+                                marker='o', fillstyle=fillStyle, markersize= 12, 
+                                label=legendText)
+                (_, caps, _) = chamberPlot.errorbar(xColData, yColData, stdDevData, capsize=5, c=lineColor, fmt='none')
             
             chamberPlot = formatPlot(chamberPlot, root, propertyFolder, peakWn)
             plt.show()
@@ -152,4 +161,4 @@ def plotChambers(
                     
 
 if __name__ == "__main__":          #does not run if importing only if running
-    plotChambers("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure/0_raw-data", plotFolderNm = "5a_fit-avg-std_by-prop_no-corr", inputPkWn = 1711, filtersFile = 'filters-pct-T.csv')
+    plotChambers("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure/0_raw-data", plotFolderNm = "5ci_fit-delCI-unpaired_byProp_darkCorr", inputPkWn = 1685, filtersFile = 'filters-pct-T.csv')

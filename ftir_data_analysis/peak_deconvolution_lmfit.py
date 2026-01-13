@@ -28,8 +28,12 @@ from lmfit import Minimizer, Parameters, Parameter, Model #create_params, report
 import matplotlib.pyplot as plt
 import math
 import colorsys
+import re                   #regular expressions for list comprehension and string parsing 
 
 np.set_printoptions(suppress=True)
+
+def getPosition(file):
+    return int(re.sub('[a-zA-Z]+', '', file.split('-')[2]))
 
 #grabs group of 4 spectra and splits into wavenumber and data columns
 #input: fileNm (file name of spectra set, output by pre-processing scripts)
@@ -98,13 +102,17 @@ def peakParameters(start, stop, paramsDir, nmWn):
         fwhm = Parameter(name = f"p{pkID}_fwhm", value=pkPrmsTbl[:,7][i], vary=True, min=pkPrmsTbl[:,6][i], max=pkPrmsTbl[:,8][i])
         c = Parameter(name = f"p{pkID}_c", value=pkPrmsTbl[:,10][i], vary=False)
         fitParams.add_many((wn), (area), (fwhm), (c))
-
     return fitParams, numPeaks
 
 #custom gaussian function, though lmfit has built in models for gaussian, lorentzian, voight, etc that could be implemented if desired. 
 def gauss_Area(x, wn, area, fwhm, c):
     return c + area/(fwhm*math.sqrt(math.pi/(4*math.log(2)))) * np.exp(-4*math.log(2)*(x-wn)**2/(fwhm**2))
 
+def gauss_Area_test(x, wn, area, fwhm, c):
+    totalVal = c + area/(fwhm*math.sqrt(math.pi/(4*math.log(2)))) * np.exp(-4*math.log(2)*(x-wn)**2/(fwhm**2))
+    # c + area/(fwhm*math.sqrt(math.pi/(4*math.log(2)))) * np.exp(-4*math.log(2)*(x-wn)**2/(fwhm**2))
+    # c + area/(fwhm*math.sqrt(math.pi/(4*math.log(2)))) * np.exp(-4*math.log(2)*(x-wn)**2/(fwhm**2))
+    return totalVal
 #not currently implemented! requires some adjusting to use csv input parameters. 
 # def gauss_Height(x, wn, amp, fwhm, c):
 #     return c + amp * np.exp(-0.5 * (((x-wn)**2)/(fwhm**2)))
@@ -125,18 +133,20 @@ def fitSection(start, stop, xSec, ySec, params, numPeaks):
     resultParams = out.params
     return resultParams, bestFit
 
-#convert lmfit output params to human-readable table for csv export 
-def paramsToArray(params):
-    wns, areas, fwhms, cs = [], [], [], []
+#convert lmfit output params to human-readable table for csv export. coded for gaussian more or less. 
+def paramsToArray(params, xSec):
+    wns, areas, fwhms, cs, heights = [], [], [], [], []
     for param in params.valuesdict():
         paramType, pkID = param.split("_")[1], param.split("_")[0].replace("p", "")
-        #print(f"paramType: {paramType}, peakID: {pkID}")
+        # print(f"paramType: {paramType}, peakID: {pkID}")
         match paramType:
             case 'wn': wns.append(params.valuesdict()[param])
             case 'area': areas.append(params.valuesdict()[param])
             case 'fwhm': fwhms.append(params.valuesdict()[param])
             case 'c': cs.append(params.valuesdict()[param])
     parsArr = np.array([wns, areas, fwhms, cs]).T
+    heights = [float(max(gauss_Area(xSec, *parsArr[i, :]))) for i in range(parsArr.shape[0])]
+    parsArr = np.column_stack((parsArr, heights))
     return parsArr
 
 #input - array of resulting parameters to add normalized column to (paramsArr), index of the column
@@ -185,7 +195,7 @@ def fitOneFolder(
         rawDataFolder, 
         blFileNm='PET-baseline-wns-fit.txt',
         normDataFolderNm = "2_normalized",
-        fitOutFolderNm = "3_fit-results",
+        fitOutFolderNm = "3_fit-results-new",
         startStopList = [['565', '742'],['1517', '1900']],
         normWn = "723",
         totalFiles = 0, 
@@ -220,7 +230,7 @@ def fitOneFolder(
 
         #looping through files in target folder 
         for filename in files: 
-            if filename.endswith('Avg.csv')==False:
+            if filename.endswith('Avg.csv')==False and getPosition(filename)==1:                            #####ONLY DOING POS 1 for TESTING 
             #if filename=="20250130_PET-Ch1-Pos2-81h-Air_N723.csv":    #single file for testing 
 
                 wavenumbers, dataSet = getSpecSet(filename, sourceFolder)
@@ -240,16 +250,16 @@ def fitOneFolder(
                         sectionParams, numberPeaks = peakParameters(xStartWn, xStopWn, parentDir, normWn) #gets parameters from params file
                         
                         outParams, sectionFit = fitSection(xStartWn, xStopWn, xSection, ySection, sectionParams, numberPeaks)
-                        resultsArr = paramsToArray(outParams)
+                        resultsArr = paramsToArray(outParams, xSection)
     #                 if j!=0: #this is just to skip plotting the first setion, 565-742, in the preview window, since this section's fit is relatively straightforward. 
     #                     #plotFit(initGuess_multi, popt_multi, xSection, ySection, filename)
-                        plotFitCheck(outParams, sectionFit, xSection, ySection, filename, plotColors, i+1)
+                        # plotFitCheck(outParams, sectionFit, xSection, ySection, filename, plotColors, i+1)
                         if j == 0:  #create the array for the fit results (for the first section)
                             allParams = resultsArr
                         else:       #add to the array for the fit results (for all following sections)
                             allParams = np.vstack([allParams, resultsArr])
                  
-                    columnsList = ['wavenumbers', 'area (N'+normWn+')', 'FWHM', 'y int'] #,'height (N'+normWn+')']   
+                    columnsList = ['wavenumbers', 'area (N'+normWn+')', 'FWHM', 'y int','height (N'+normWn+')']   
                 
                     #dividing by all areas and adding as new columns
                     totalPeaks = allParams.shape[0]
@@ -267,6 +277,6 @@ def fitOneFolder(
 
 
     
-fitOneFolder("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure/2_normalized/723/chamber-5/20251125-2107h", "C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure/0_raw-data")
+fitOneFolder("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure-ND-filters/2_normalized/723/chamber-1/20250130-81h", "C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure-ND-filters/0_raw-data")
 
 #fitOneFolder("//Cfs2e.nist.gov/73_el/731/internal/CONFOCAL/FS2/Data4/Hsiuchin/reciprocity experiment (3M PET)/FTIR/cutoff 305/KLJ-processing/2_normalized/723/16h", "//cfs2e.nist.gov/73_EL/731/internal/CONFOCAL/FS2/Data4/Hsiuchin/reciprocity experiment (3M PET)/FTIR/cutoff 305/KLJ-processing/0_raw-data")

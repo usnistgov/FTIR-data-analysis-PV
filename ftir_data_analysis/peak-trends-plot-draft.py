@@ -84,8 +84,8 @@ def formatPlot(
     titleString = f"Chamber {chID}: {propFolderNm} {pkWn} cm\u207b\u00B9" 
     
     fmtPlot = chPlot
+    fmtPlot.legend(loc='upper left', bbox_to_anchor=(0.99, 0.99), frameon=False, prop=dict(family=fontString, size=18))
     plt.title(titleString, fontsize=22, y=1.05, family = fontString)
-    # trendsX.legend(loc='upper left', bbox_to_anchor=(0.99, 0.99), frameon=False, prop=dict(family=fontString, size=18))
     # trendsX.set_xlabel(f"Dose (W/m\u00B2)", fontsize=22, font = fontString)
     # #trendsX.set_ylabel(f"Area ({peakDict[targetPeak]}) / Area ({normWn})", fontsize=22, font = fontString)
     # trendsX.set_ylabel(f"\u0394 Product index ({peakDict[targetPeak]} cm\u207b\u00B9)", fontsize=22, font = fontString)
@@ -142,23 +142,30 @@ def plotChambers(
                 avgsArray = np.loadtxt(avgPath, delimiter=',', skiprows=1)
                 stDevArray = np.loadtxt(stDevPath, delimiter=',', skiprows=1)
                 
+                #set up x and y data 
                 xColData = avgsArray[:,xColInd]
                 yColData = avgsArray[:,yColInd]
                 stdDevData = stDevArray[:,yColInd]
 
                 # formatData(file, root, propertyFolder, peakWn, filtersArray, filtersColNames)
+                #set up parameters for formatting DATA (data as in lines, markers)
                 lineColor, fillStyle, legendText = formatData(file, root, allPositions, filtersHandling)
+                
                 chamberPlot.plot(xColData, yColData,
                                 linestyle='-', 
                                 color=lineColor, markeredgecolor=lineColor, markerfacecolor=lineColor,
                                 marker='o', fillstyle=fillStyle, markersize= 12, 
-                                label=legendText)
+                                label=legendText) 
                 (_, caps, _) = chamberPlot.errorbar(xColData, yColData, stdDevData, capsize=5, c=lineColor, fmt='none')
             
+            #add formatting to completed PLOT
             chamberPlot = formatPlot(chamberPlot, root, propertyFolder, peakWn)
             plt.show()
             
                     
 
 if __name__ == "__main__":          #does not run if importing only if running
-    plotChambers("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure/0_raw-data", plotFolderNm = "5ci_fit-delCI-unpaired_byProp_darkCorr", inputPkWn = 1685, filtersFile = 'filters-pct-T.csv')
+    plotChambers("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure-ND-filters/0_raw-data", 
+                 plotFolderNm = "5ci_fit-delCI-unpaired_byProp_darkCorr", 
+                 inputPkWn = 1685, 
+                 propertyFolder = 'divided_Area_by1714', filtersFile = 'filters-pct-T.csv')

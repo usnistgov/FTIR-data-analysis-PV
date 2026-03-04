@@ -99,10 +99,11 @@ def plotBaseline(wns, spectrum, baseline, blCorr, minsInd, blYVals, file):
 #baseline loop
 def baselinePolyFitLoop(
         rawDataDir, 
-        polyFitPower = 3, 
+        polyFitPower = 2, 
         blOutFolderNm = "1_baseline-corrected",
+        singleBlOutFolderNm = "1a_baseline-corrected-singles",
         blFileNm='PET-baseline-wns-fit.txt',
-        showPlots=False,
+        showPlots=True,
         ):
     
     #create baseline output main folder
@@ -110,7 +111,12 @@ def baselinePolyFitLoop(
     parentDir = rawDataFolder.absolute().parent 
     blCorrFolder = parentDir / blOutFolderNm
     blCorrFolder.mkdir(parents=True, exist_ok=True)
-    
+
+
+    #adding single file output - trying to move away from grouping over time. 
+    blCorrSingleFolder = parentDir / singleBlOutFolderNm
+    blCorrSingleFolder.mkdir(parents=True, exist_ok=True)
+
     #get baseline anchor points file. 
     blFilePath = parentDir / blFileNm      #this is just the file with the starting anchor points. 
     baselinePoints = np.loadtxt(blFilePath, delimiter=" ")
@@ -127,6 +133,10 @@ def baselinePolyFitLoop(
         depth = root.replace(str(rawDataFolder), '').count(os.sep)
         outputFolder = Path(root.replace(str(rawDataFolder), str(blCorrFolder)))
         outputFolder.mkdir(parents=True, exist_ok=True)
+
+     #adding single file output - trying to move away from grouping over time. 
+        singleOutputFolder = Path(root.replace(str(rawDataFolder), str(blCorrSingleFolder)))
+        singleOutputFolder.mkdir(parents=True, exist_ok=True)
         
         for filename in files: 
             #gets wavenumber array if not already in existence. 
@@ -150,26 +160,36 @@ def baselinePolyFitLoop(
                     shiftSpec, blSpec, blXInds, blYIntVals = fitBaseline(specMinsInd, wavenumbers, rawSpectrum, polyFitPower)
                     blCorrSpec = shiftSpec - blSpec
                     
+                    #output Single Files 
+                    singleOutputFilename =  str('_'.join(filename.split('_')[:-1]) + '-BLCorr_' + filename.split('_')[-1])
+                    singleOutputPath = singleOutputFolder / singleOutputFilename
+                    singleCorrFile = np.column_stack((wavenumbers, blCorrSpec))
+
+                    np.savetxt(singleOutputPath, singleCorrFile, '%5.7f', delimiter=',')
+
                     #plotting uses a lot of memory so I would only use this while your set is small just to check on it.
                     if showPlots == True:
                         plotBaseline(wavenumbers, shiftSpec, blSpec, blCorrSpec, blXInds, blYIntVals, filename)
                     
+                    #this section groups replicates into one file. Sometimes it's nice (for opening in origin, e.g.) but i'm trying to get away from it. 
                     #starts a new BL corrected set if it's the first one in a set. adds to the existing one otherwise.
                     if np.any(dataSet)==False:
                           dataSet = blCorrSpec
                     else:
                           dataSet = np.column_stack((dataSet, blCorrSpec))
             
-                outputFile = np.column_stack((wavenumbers, dataSet))
+                groupedOutputFile = np.column_stack((wavenumbers, dataSet))
             #creates output path for each new file. 
-                outputFilepath = outputFolder / str('_'.join(filename.split('_')[:-1]) + '_blCorr.csv')
-                np.savetxt(outputFilepath, outputFile, '%5.7f', delimiter=',')
+                groupedOutputFilepath = outputFolder / str('_'.join(filename.split('_')[:-1]) + '_blCorr.csv')
+                np.savetxt(groupedOutputFilepath, groupedOutputFile, '%5.7f', delimiter=',')
 
 
 
 if __name__ == "__main__":          #does not run if importing only if running
-    baselinePolyFitLoop("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure/0_raw-data")    
-    #baselinePolyFitLoop("//cfs2e.nist.gov/73_EL/731/internal/CONFOCAL/FS2/Data4/Hsiuchin/reciprocity experiment (3M PET)/FTIR/cutoff 305/KLJ-processing/0_raw-data", showPlots=True)    
+    # baselinePolyFitLoop("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure-ND-filters/0_raw-data")    
+    # baselinePolyFitLoop("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure-no-filters/0_raw-data")  
+    baselinePolyFitLoop("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/0_raw-data", showPlots = False)  
+    # baselinePolyFitLoop("//cfs2e.nist.gov/73_EL/731/internal/CONFOCAL/FS2/Data4/Hsiuchin/reciprocity experiment (3M PET)/FTIR/cutoff 305/KLJ-processing/0_raw-data", showPlots=True)    
     
         
 #print(depth)

@@ -28,7 +28,7 @@ def averageWavenumbers(folder):
     #local function for list comprehension
     def importDataFunc(file):
         return np.loadtxt(Path(root) / file, delimiter=',', skiprows=1, usecols=0)
-    
+    print(folder)
     for root, dirs, files in os.walk(folder):   #loop through full folder 
             if len(files)>0 and root.split('\\')[-1] == 'Average':   #if files are in folder and only average folders 
                 wnArray = np.array([importDataFunc(filename) for filename in files])    #uses local load function to get first column of each file (wavenumbers) and creates array of all of them, each file as new row
@@ -60,7 +60,8 @@ def arrange(
             expHrsList = [float(re.sub('[a-zA-Z]+', '', file.split('-')[3])) for file in files] #specific to my file naming conventions! grabs section with exposure hours and removes all alphanumberics (regex pattern '[a-zA-Z]+')
 
             chID = str(Path(root).parent.parent).split('\\')[-1].split('-')[-1]
-            dosesCSVPath = parentDir.parent / f"Doses-Ch-{chID}.csv"
+            ##CLEAN THIS UP LATER 
+            dosesCSVPath = parentDir.parent / f"Doses-Ch-{chID}.csv" if "no-filters" not in rawDataDir else parentDir.parent / f"Doses-Ch-{chID}-no-filters.csv"
             dosesArray = np.loadtxt(dosesCSVPath, delimiter=',', usecols=range(3,22), dtype=str)
             position = re.sub('[a-zA-Z]+', '', str(Path(root).parent).split('\\')[-1].split('-')[-1])
             #adding doses and actual exposure times as optional x columns
@@ -280,8 +281,8 @@ def subtractDarkControl(
 
 
 if __name__ == "__main__":          #does not run if importing only if running
-    # arrange("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure/0_raw-data") 
-    # subtractInitialUnpaired("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure/0_raw-data") 
-    # subtractInitialPaired("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure/0_raw-data")  
-    subtractDarkControl("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure/0_raw-data", paired=True, initSubFolderNm = "5bii_fit-delCI-paired_byProp_noCorr", darkCorrFolderNm = "5cii_fit-delCI-paired_byProp_darkCorr")
-    subtractDarkControl("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure/0_raw-data", paired=False, initSubFolderNm = "5bi_fit-delCI-unpaired_byProp_noCorr", darkCorrFolderNm = "5ci_fit-delCI-unpaired_byProp_darkCorr")
+    arrange("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure-no-filters/0_raw-data") 
+    subtractInitialUnpaired("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure-no-filters/0_raw-data") 
+    subtractInitialPaired("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure-no-filters/0_raw-data")  
+    subtractDarkControl("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure-no-filters/0_raw-data", paired=True, initSubFolderNm = "5bii_fit-delCI-paired_byProp_noCorr", darkCorrFolderNm = "5cii_fit-delCI-paired_byProp_darkCorr")
+    subtractDarkControl("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure-no-filters/0_raw-data", paired=False, initSubFolderNm = "5bi_fit-delCI-unpaired_byProp_noCorr", darkCorrFolderNm = "5ci_fit-delCI-unpaired_byProp_darkCorr")

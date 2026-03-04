@@ -40,13 +40,26 @@ def getMins(wns, spectrum, blPts):
     return minsInd
 
 #returns section of spectrum 
+
+#returns section of spectrum 
 def getSection(wns, spectrum, zeros, startWn, stopWn):
     startInd = min(zeros, key=lambda x:abs(float(startWn)-wns[x]))
+    if abs(wns[startInd] - float(startWn)) > 20:                                            #duct tape error handling for when the boundaries needed don't fit with the best baseline anchors when fitting a baseline
+        startInd = np.where(wns == (min(wns, key=lambda x: abs(float(startWn)-x))))[0][0]
     stopInd = min(zeros, key=lambda x:abs(float(stopWn)-wns[x]))
+    if abs(wns[stopInd] - float(stopWn)) > 20:                                              #duct tape error handling for when the boundaries needed don't fit with the best baseline anchors when fitting a baseline
+        stopInd = np.where(wns == (min(wns, key=lambda x: abs(float(stopWn)-x))))[0][0]
     xSubsection = wns[startInd:stopInd+1]
     ySubsection = spectrum[startInd:stopInd+1]
-    
     return startInd, stopInd, xSubsection, ySubsection
+
+# def getSection(wns, spectrum, zeros, startWn, stopWn):
+#     startInd = min(zeros, key=lambda x:abs(float(startWn)-wns[x]))
+#     stopInd = min(zeros, key=lambda x:abs(float(stopWn)-wns[x]))
+#     xSubsection = wns[startInd:stopInd+1]
+#     ySubsection = spectrum[startInd:stopInd+1]
+    
+#     return startInd, stopInd, xSubsection, ySubsection
 
 #gets peak fitting parameters from bounds file and puts into tuple format for curve_fit
 def peakParameters(start, stop):
@@ -114,7 +127,6 @@ def fitSection(start, stop, xSec, ySec):
         heightsList.append(peakHeight)   
     heights = np.array([heightsList])
     paramsFitArr = np.resize(paramsFit, (numPeaks,4))
-    #print(paramsFitArr)
     paramsFitArr = np.concatenate((paramsFitArr, heights.T), axis=1)
     return initGuess, bounds, paramsFit, pcov, paramsFitArr
 
@@ -189,13 +201,13 @@ def plotFitCheck(initGuessList, paramsFit, xSec, ySec, file):
 #ACTUAL PROCESS
 def fitOneFile(chFolder, dateFolder, totalFiles, fileCounter):
     directory = normFTIRFolder / str(normWn) / chFolder / dateFolder  
-    chamberOutFolder = parentDir / folderNm / "3_fit-results" / normWn / str(str(chFolder).split('\\')[-1:][0])
+    chamberOutFolder = parentDir / folderNm / "3_fit-results-old" / normWn / str(str(chFolder).split('\\')[-1:][0])
     chamberFigOutFolder = parentDir / folderNm / "x_deconv-figs" / normWn / str(str(chFolder).split('\\')[-1:][0])
     chamberOutFolder.mkdir(parents=True, exist_ok=True)         #creates folder if it doesn't exist 
     chamberFigOutFolder.mkdir(parents=True, exist_ok=True)      #creates folder if it doesn't exist 
     
     for file in directory.iterdir(): 
-        
+        print(file)
         filename = str(file).split('\\')[-1]
         pos = filename.split("-")[2]
         expHrs = filename.split('-')[3]
@@ -220,9 +232,9 @@ def fitOneFile(chFolder, dateFolder, totalFiles, fileCounter):
                     startIndex, stopIndex, xSection, ySection = getSection(wavenumbers, yAll, yZeros, xStartWn, xStopWn)
                     initGuess_multi, bounds_multi, popt_multi, pcov_multi, resultsArr = fitSection(xStartWn, xStopWn, xSection, ySection)
                     
-                    # if j!=0: #this is just to skip plotting the first setion, 565-742, in the preview window, since this section's fit is relatively straightforward. 
+                    if j!=0: #this is just to skip plotting the first setion, 565-742, in the preview window, since this section's fit is relatively straightforward. 
                         #plotFit(initGuess_multi, popt_multi, xSection, ySection, filename)
-                        # plotFitCheck(initGuess_multi, popt_multi, xSection, ySection, filename)
+                        plotFitCheck(initGuess_multi, popt_multi, xSection, ySection, filename)
                     if j == 0:  #create the array for the fit results (for the first section)
                         allParams = resultsArr
                     else:   # add to the array for the fit results (for all following sections)
@@ -283,11 +295,11 @@ def fitMultiFiles(startHours, endHours):
                     print('\r' + str(timeoutList))
                     pass
 
-folderNm='FTIR-data-PET-exposure'  
+folderNm='FTIR-data-PET-exposure-ND-filters'  
 directory = "C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity"
 parentDir = Path(directory)
 #parentDir = Path().absolute().parent
-blFilePath = parentDir / folderNm / 'PET-baseline-wns.txt'
+blFilePath = parentDir / folderNm / 'PET-baseline-wns-fit.txt'
 normFTIRFolder = parentDir / folderNm / "2_normalized" 
 normWn = '723'
 normFolder = normFTIRFolder / normWn
@@ -306,5 +318,5 @@ timeoutList = []
 #fitOneFile("chamber-1", "20250804-1171h")
 
 #enter start and stop hours for fitting a range of date folders
-fitMultiFiles(1681, 1681)
+fitMultiFiles(104, 185)
 print('\n' + str(timeoutList))

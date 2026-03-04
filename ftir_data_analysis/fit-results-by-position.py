@@ -113,7 +113,6 @@ def createAvgStdFiles(
             
             for set in fileSets:  
                 setArray = np.array([importDataFunc(filename) for filename in set])
-                print(setArray.shape)
                 filePrefix = set[0][:(set[0].rfind('_'))]
 
                 avgArray = setArray.mean(axis=0)  #wavenumbers included in average
@@ -129,6 +128,6 @@ def createAvgStdFiles(
                 
 
 if __name__ == "__main__":          #does not run if importing only if running
-    fitByPosition("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure/0_raw-data")    
-    # createAvgStdFiles("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure/0_raw-data")    
+    fitByPosition("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure-no-filters/0_raw-data")    
+    createAvgStdFiles("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure-no-filters/0_raw-data")    
     

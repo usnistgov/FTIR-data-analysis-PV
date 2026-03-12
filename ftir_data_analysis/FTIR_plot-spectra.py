@@ -86,7 +86,6 @@ def findRepSpecIndex(filelist, path):
                 meanDiffList = [(normAvg[1] -yData[:,i]).mean(axis=0) for i in range(columns)]        #for each data set, find replicate closest to the average 
                 repSpecIndList.append(meanDiffList.index(min(meanDiffList)))
         repSpecInd = max(set(repSpecIndList), key=repSpecIndList.count)             #find which index is closest to the average the most often
-    
         return repSpecInd
 
 # def createNames(chFolder, fileList, pos, chDatOutFolder):
@@ -108,14 +107,7 @@ def makeSpecArr(filelist, path, repSpecInd):
         wns = getSpec(path / filelist[0])[:, 0]
         dataSet = np.column_stack((wns, np.array([getSpec(path / file)[:,repSpecInd+1] for file in filelist]).T ))#array of data column for representative spectra replicate index at all time points, with wavenumbers at front         
         return dataSet
-   
-# def findPeaks(pkWns, wns):
-#     pkIndsList = []
-#     for i in pkWns:
-#         pkIndTemp = wns.tolist().index(min(wns.tolist(), key=lambda x:abs(i-x)))
-#         pkIndsList.append(pkIndTemp)
 
-#     return pkIndsList
 
 # def plotSpec(specDF, plotTitle, axisLims, dims, outFileNm, outFolder, pkInds, stepSize, peakList):   
 #     if len(specDF.columns)>2:
@@ -337,47 +329,8 @@ def plotSpectra(
             
 
                             
-     
-
-     
-
-
-# for chamberFolder in normFTIRFolder.iterdir():
-#     chamberID = str(chamberFolder).split("\\")[-1].split("-")[-1]
-#     doseCSV = pd.read_csv(parentDir / f"Doses-Ch-{chamberID}.csv", sep=',', header=0, index_col="file suffix" , on_bad_lines="skip", engine='python')
-#     print(f"chamberID: {chamberID}")
-
-#     chamberFigOutFolder = parentDir / folderNm / "x_figs" / str(normWn) /str(str(chamberFolder).split('\\')[-1:][0])
-#     chamberFigOutFolder.mkdir(parents=True, exist_ok=True)
-
-#     positionList = createPosList(chamberFolder)
-#     #dosesDF = pd.read_csv(parentDir / f"Doses-Ch-{str(chamberFolder)[-1]}.csv", sep=',', header=0, index_col=0,  usecols=["file suffix", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17"], on_bad_lines="skip", engine='python')
-#     for position in positionList:  
-        
-#         repSpecIndex, posFileList, wavenumbers = findRepSpec(position, chamberFolder)
-
-#         pltTitle, outDatFileNm, outDataPath = createNames(chamberFolder, posFileList, position, chamberDataOutFolder)
-#         peakInds = findPeaks(peaks, wavenumbers)
-#         spectraPlotDF = createPlotDF(posFileList, repSpecIndex, wavenumbers, chamberFolder)
-
-#         spectraPlotDF.to_csv(outDataPath, sep=',')
-#         #plotSpec(spectraPlotDF, [400, 4000, -0.05, 6])
-#         #723
-#         #plotSpec(spectraPlotDF, pltTitle, [1440, 1850, -0.05, 1.5], (5,6), outDatFileNm, chamberFigOutFolder, peakInds, 100, peakListCarb)
-#         #plotSpec(spectraPlotDF, pltTitle, [2250, 4000, -0.01, 0.42], (5,6), outDatFileNm, chamberFigOutFolder, peakInds, 500, peakListHydrox)
-#         plotSpec(spectraPlotDF, pltTitle, [400, 1500, -0.05, 1.55], (10,6), outDatFileNm, chamberFigOutFolder, peakInds, 100, peakListRest)
-        
-        
-#         #plotSpec(spectraPlotDF, pltTitle, [2300, 4000, -0.01, 0.2], (10,5), outDatFileNm, chamberFigOutFolder, peakInds)
-#         #plotSpec(spectraPlotDF, pltTitle, [400, 1850, -0.05, 1.1], (10,5), outDatFileNm, chamberFigOutFolder, peakInds)
-#         #1409
-#         #plotSpec(spectraPlotDF, pltTitle, [1550, 1850, -0.05, 5.5], (5,5), outDatFileNm, chamberFigOutFolder, peakInds)
-#         #plotSpec(spectraPlotDF, pltTitle, [400, 4000, -0.05, 6], (10,5), outDatFileNm, chamberFigOutFolder, peakInds)
-#         #plotSpec(spectraPlotDF, pltTitle, [2300, 4000, -0.01, 0.2], (10,5), outDatFileNm, chamberFigOutFolder, peakInds)
-#         #plotSpec(spectraPlotDF, pltTitle, [400, 1850, -0.05, 6], (10,5), outDatFileNm, chamberFigOutFolder, peakInds)
-
 
 if __name__ == "__main__":          #does not run if importing only if running
-#     normByPosition("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure-ND-filters/0_raw-data")
-    # createPlotData("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure-ND-filters/0_raw-data")
-    plotSpectra("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure-ND-filters/0_raw-data")
+    # normByPosition("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/0_raw-data")
+    # createPlotData("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/0_raw-data")
+    plotSpectra("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/0_raw-data")

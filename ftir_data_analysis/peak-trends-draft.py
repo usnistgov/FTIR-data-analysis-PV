@@ -1,6 +1,13 @@
 
 # -*- coding: utf-8 -*-
 """
+1) FTIR_baseline_polyfit.py
+2) FTIR_normalize.py
+2a) (optional) FTIR_plot-spectra.py
+3) peak_deconvolution_lmfit.py
+4) fit-results-by-position.py 
+5) peak-trends-draft.py         <---------
+6) peak-trends-plot-draft.py 
 
 @author: klj
 """
@@ -28,7 +35,6 @@ def averageWavenumbers(folder):
     #local function for list comprehension
     def importDataFunc(file):
         return np.loadtxt(Path(root) / file, delimiter=',', skiprows=1, usecols=0)
-    print(folder)
     for root, dirs, files in os.walk(folder):   #loop through full folder 
             if len(files)>0 and root.split('\\')[-1] == 'Average':   #if files are in folder and only average folders 
                 wnArray = np.array([importDataFunc(filename) for filename in files])    #uses local load function to get first column of each file (wavenumbers) and creates array of all of them, each file as new row
@@ -281,8 +287,8 @@ def subtractDarkControl(
 
 
 if __name__ == "__main__":          #does not run if importing only if running
-    arrange("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure-no-filters/0_raw-data") 
-    subtractInitialUnpaired("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure-no-filters/0_raw-data") 
-    subtractInitialPaired("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure-no-filters/0_raw-data")  
-    subtractDarkControl("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure-no-filters/0_raw-data", paired=True, initSubFolderNm = "5bii_fit-delCI-paired_byProp_noCorr", darkCorrFolderNm = "5cii_fit-delCI-paired_byProp_darkCorr")
-    subtractDarkControl("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure-no-filters/0_raw-data", paired=False, initSubFolderNm = "5bi_fit-delCI-unpaired_byProp_noCorr", darkCorrFolderNm = "5ci_fit-delCI-unpaired_byProp_darkCorr")
+    arrange("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/0_raw-data") 
+    subtractInitialUnpaired("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/0_raw-data") 
+    subtractInitialPaired("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/0_raw-data")  
+    subtractDarkControl("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/0_raw-data", paired=True, initSubFolderNm = "5bii_fit-delCI-paired_byProp_noCorr", darkCorrFolderNm = "5cii_fit-delCI-paired_byProp_darkCorr")
+    subtractDarkControl("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/0_raw-data", paired=False, initSubFolderNm = "5bi_fit-delCI-unpaired_byProp_noCorr", darkCorrFolderNm = "5ci_fit-delCI-unpaired_byProp_darkCorr")

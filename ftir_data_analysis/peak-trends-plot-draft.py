@@ -81,11 +81,27 @@ def formatPlot(
     
     #title for plot - in-progress  
     chID = str(Path(avgFolder).parent.parent).split('\\')[-1].split('-')[-1]
-    titleString = f"Chamber {chID}: {propFolderNm} {pkWn} cm\u207b\u00B9" 
+    property_prefix = re.sub(r'\d+', '', propFolderNm).casefold()   #casefold: matches regardless of case. https://shorturl.at/pJz3y
+    property_string = 'Unknown Property'
+    divisor_string = ''
+
+    if 'area'.casefold() in property_prefix and 'div'.casefold() in property_prefix:
+        property_string = 'Peak Area Ratio'
+        divisor_string = f"/{re.sub('[a-zA-Z_]+', '', propFolderNm)} cm\u207b\u00B9"
+    elif 'area'.casefold() in property_prefix and 'div'.casefold() not in property_prefix:
+        property_string = 'Peak Area'
+    elif 'fwhm'.casefold() in property_prefix:
+        property_string = 'Peak FWHM'
+    elif 'height'.casefold() in property_prefix: 
+        property_string = 'Peak Height'
+
+    titleString = f"Chamber {chID}: {property_string} {pkWn} cm\u207b\u00B9{divisor_string}" 
     
     fmtPlot = chPlot
     fmtPlot.legend(loc='upper left', bbox_to_anchor=(0.99, 0.99), frameon=False, prop=dict(family=fontString, size=18))
     plt.title(titleString, fontsize=22, y=1.05, family = fontString)
+
+    chPlot.set(xlim=(0, 400), ylim=(-0.2, 6))
     # trendsX.set_xlabel(f"Dose (W/m\u00B2)", fontsize=22, font = fontString)
     # #trendsX.set_ylabel(f"Area ({peakDict[targetPeak]}) / Area ({normWn})", fontsize=22, font = fontString)
     # trendsX.set_ylabel(f"\u0394 Product index ({peakDict[targetPeak]} cm\u207b\u00B9)", fontsize=22, font = fontString)
@@ -131,11 +147,16 @@ def plotChambers(
             
             #need to move filters Array somewhere it can be turned on and off 
             sortedFiles = filterSort(files) if filtersHandling==True else files                          #sort files by filter grouping before iterating to simplify
+            
+  #### !!!! ###REMOVE POSITION 12 - ONLY FOR SPECIFIC EXPOSURE IN WHICH 12 WAS FLIPPED. REMOVE FOR OTHER DATA SETS###
+            sortedFiles = [file for file in sortedFiles if float(getPosition(file)) != 12]
+  #### !!!! ### REMOVE ABOVE LINE FOR OTHER DATA SETS###
+
             sortedFiles = [file for file in sortedFiles if float(getPosition(file)) != 1] if plotDarkPos == False else sortedFiles       #remove position 1 if plotDarkPos == False
             allPositions = [float(re.sub('[a-zA-Z]+', '', file.split('-')[2])) for file in files]
 
             for file in sortedFiles:
-
+                
                 avgPath = Path(root) / file
                 stDevPath = Path(str(root).replace('Average', 'StDev')) / file.replace('Avg', 'StDev')
 
@@ -165,7 +186,10 @@ def plotChambers(
                     
 
 if __name__ == "__main__":          #does not run if importing only if running
+    # plotChambers("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure-ND-filters/0_raw-data",
     plotChambers("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure-ND-filters/0_raw-data", 
                  plotFolderNm = "5ci_fit-delCI-unpaired_byProp_darkCorr", 
                  inputPkWn = 1685, 
                  propertyFolder = 'divided_Area_by1714', filtersFile = 'filters-pct-T.csv')
+    
+    #to do - skip plotting position 12 for this exposure 

@@ -34,6 +34,7 @@ import matplotlib.pyplot as plt
 import math
 import colorsys
 import re                   #regular expressions for list comprehension and string parsing 
+import time                 #just used to monitor how long fits take to run
 
 np.set_printoptions(suppress=True)
 
@@ -79,7 +80,6 @@ def createPeakDict(ssList, paramsDir, nWn):
     for j in range(len(ssList)):
         startWn, stopWn = ssList[j][0], ssList[j][1]
         pkPrmFilePath = paramsDir / ("peak-params_" + startWn + "-" + stopWn + "-N" + str(nWn) + "-lmfit.csv")
-        # pkPrmsTbl = np.loadtxt(pkPrmFilePath, skiprows=1, delimiter=",")    #skips headers
         pkPrmsTbl = np.genfromtxt(pkPrmFilePath, skip_header=1, delimiter=",")    #skips headers
         for wn in pkPrmsTbl[:,1]:
             peakDictionary[ind] = str(int(wn))
@@ -94,63 +94,101 @@ def genPlotColors(pkDict):
     return rgbTups
 
 #creates peak parameters for fitting using lmfit. 
-def peakParameters(start, stop, paramsDir, nmWn):
+def peakParameters(start, stop, maxh, paramsDir, nmWn):
     #import csv file 
     pkPrmFilePath = paramsDir / ("peak-params_" + start + "-" + stop + "-N" + str(nmWn) + "-lmfit.csv")
-    # pkPrmsTbl = np.loadtxt(pkPrmFilePath, skiprows=1, delimiter=",")
     pkPrmsTbl = np.genfromtxt(pkPrmFilePath, skip_header=1, delimiter=",")    #skips headers
     np.nan_to_num(pkPrmsTbl, nan=np.nan)
     numPeaks = len(pkPrmsTbl[:,0])
+    
+    fitParams = Parameters()        #creates Parameter object, part of lmfit. dict type  
 
     def miniParamGen(suffix, ind, varyBool):
-        return Parameter(name = f"p{pkID}_{suffix}", vary=varyBool, 
+        fitParams.add(name = f"p{pkID}_{suffix}", vary=varyBool, 
                           value=pkPrmsTbl[i, ind] if np.isnan(pkPrmsTbl[i,ind]) == False else None, 
                           min=pkPrmsTbl[i, ind-1] if np.isnan(pkPrmsTbl[i, ind-1]) == False else -np.inf, 
                           max=pkPrmsTbl[i, ind+1] if np.isnan(pkPrmsTbl[i, ind+1]) == False else np.inf)
+    # save ratio constraints separately to refer to in the residual. 
+    # lmfit prioritizes expressions over min and max of parameters in dependent parameters, and 
+    # entering a min and max may cause clipping before the penalty can take effect.  
+    ratConst = pkPrmsTbl[:, -3:]
 
-    fitParams = Parameters()        #creates Parameter object, part of lmfit. dict type  
     for i in range(numPeaks):       #currently hard-coded for gaussian function 
         pkID = i+1
-        wn, area, fwhm, c, rat = miniParamGen('wn', 1, True), miniParamGen('area', 4, True), miniParamGen('fwhm', 7, True), miniParamGen('c', 10, False), miniParamGen('rat', 13, True)
-        # wn = Parameter(name = f"p{pkID}_wn", value=pkPrmsTbl[:,1][i], vary=True, min=pkPrmsTbl[:,0][i], max=pkPrmsTbl[:,2][i])
-        # area = Parameter(name = f"p{pkID}_area", value=pkPrmsTbl[:,4][i], vary=True, min=pkPrmsTbl[:,3][i], max=pkPrmsTbl[:,5][i])
-        # fwhm = Parameter(name = f"p{pkID}_fwhm", value=pkPrmsTbl[:,7][i], vary=True, min=pkPrmsTbl[:,6][i], max=pkPrmsTbl[:,8][i])
-        # c = Parameter(name = f"p{pkID}_c", value=pkPrmsTbl[:,10][i], vary=False)
+        #add base parameters to fitParams first 
+        miniParamGen('wn', 1, True), miniParamGen('area', 4, True), miniParamGen('fwhm', 7, True), miniParamGen('c', 10, False)
+        #bug fix for area = 0 causing height = 0 causing zero division error in expression params
+        if fitParams[f"p{pkID}_area"].min==0:
+            fitParams[f"p{pkID}_area"].set(min=0.0001) 
+
+        #add derived parameters 
+        fitParams.add(f"p{pkID}_h", vary=False)
+        fitParams[f"p{pkID}_h"].expr = f"p{pkID}_area / ( (p{pkID}_fwhm / (2*sqrt(2*log(2)))) *sqrt(2*pi))"
         
-        h = Parameter(name = f"p{pkID}_h", expr= f"p{pkID}_area / ( (p{pkID}_fwhm / (2*sqrt(2*log(2)))) *sqrt(2*pi))" )
-        # rat.set(expr= f"p{pkID}_fwhm / (p{pkID}_h * 1000)") #width to height ratio -not proving very useful 
-        rat.set(expr= f"p{pkID}_area / (p{pkID}_h)")
-        fitParams.add_many((wn), (area), (fwhm), (c), (h), (rat))
+        fitParams.add(f"p{pkID}_rat", vary=False)
+        fitParams[f"p{pkID}_rat"].expr = f"p{pkID}_area / p{pkID}_h"
 
-        if start + "-" + stop == "1517-1900":
-            print('add custom params here')
 
-    return fitParams, numPeaks
+
+        #come back here for custom relative parameters 
+        # if start + "-" + stop == "1517-1900":
+        #     print('add custom params here')
+
+    return fitParams, numPeaks, ratConst
 
 #custom gaussian function, though lmfit has built in models for gaussian, lorentzian, voight, etc that could be implemented if desired. 
 def gauss_Area(x, wn, area, fwhm, c):
     return c + area/(fwhm*math.sqrt(math.pi/(4*math.log(2)))) * np.exp(-4*math.log(2)*(x-wn)**2/(fwhm**2))
 
-#not currently implemented! requires some adjusting to use csv input parameters. 
-# def gauss_Height(x, wn, amp, fwhm, c):
-#     return c + amp * np.exp(-0.5 * (((x-wn)**2)/(fwhm**2)))
-
-
-def fitSection(start, stop, xSec, ySec, params, numPeaks): 
+def fitSection(start, stop, xSec, ySec, params, ratConst, numPeaks): 
     #local function for minimizer 
-    def residual(pars, x, data): #lmfit requires set number of parameters for this function type to be passed into minimizer 
-        # numPks = int(len(pars)/4) #hard coded for 4 coeffs 
-        parsvals = pars.valuesdict() #unpack pars (https://lmfit.github.io/lmfit-py/fitting.html) 
-        model = gauss_Area(x, pars['p1_wn'], pars['p1_area'], pars['p1_fwhm'], pars['p1_c'])
-        #model = Model(gauss_Area, prefix='p1_')
-        for i in range(1, numPeaks):
-            pkID = i+1
-            model = model + gauss_Area(x, pars[f'p{pkID}_wn'], pars[f'p{pkID}_area'], pars[f'p{pkID}_fwhm'], pars[f'p{pkID}_c'])
-        return model - data 
+    def residual(pars, x, data, numPeaks): #lmfit requires set number of parameters for this function type to be passed into minimizer 
+        #building model
+        model = np.zeros_like(x)
+        total_penalty = []
+        
+        # Force refresh of all derived values
+        _ = pars.valuesdict()
+
+        penalty_scale = np.max(data) * 2
+        
+        for i in range(1, numPeaks + 1):
+            wn, area, fwhm, c = pars[f'p{i}_wn'], pars[f'p{i}_area'], pars[f'p{i}_fwhm'], pars[f'p{i}_c']
+            
+            # penalty handling - implemented using modifications of suggestions from Gemini 
+            # penalties to prevent dependent parameters being ignored 
+            # gemini so kindly told me at the end when i asked for more information about the penalty parameter 
+            # that it's not necessarily the best way to do it and suggested I try soft contraints via expr. 
+            # I'm not sure it will work for my almost-circular constraints, and I also don't want to do it right now.  
+
+            rat_min, rat_max = ratConst[i-1, 0], ratConst[i-1, 2]   #get min and max from array pulled from csv 
+            rat_val = r_val = pars[f'p{i}_rat'].value               #value being held in parameter at current iteration
+            
+        
+            # Apply the penalty if it exceeds the max or min
+            # use a squared penalty to keep the gradient smooth for the optimizer
+            # penalty causes the residual to get huge when the expression parameter bounds are exceeded 
+            if np.isfinite(rat_max):   
+                total_penalty.append(np.maximum(0, rat_val - rat_max)**2 * penalty_scale)   #using np.maximum reduces number of if statements in loop and leaves penalties "vectorized" according to gemini which is supposed to be faster
+            if np.isfinite(rat_min):
+                total_penalty.append(np.maximum(0, rat_min - rat_val)**2 * penalty_scale)
+            #add peak to model
+            model += gauss_Area(x, wn, area, fwhm, c)
+
+        # # Debug Print every 50 iterations
+        # if iter_count % 50 == 0:
+        #     print(f"Iter {iter_count} | Area[0]: {pars['p1_area'].value:.2f} | Rat[0]: {pars['p1_rat'].value:.2f} | Penalty: {penalty:.2e}")
+
+        return np.concatenate([(model - data), total_penalty])
     
-    mini = Minimizer(residual, params, fcn_args=(xSec, ySec))
+    mini = Minimizer(residual, params, fcn_args=(xSec, ySec, numPeaks))
     out = mini.minimize(method='leastsq')     #leastsq: Levenberg-Marquardt (default)
-    bestFit = ySec + out.residual 
+    
+    # FIX: Slice the residual to match ySec's length
+    # This ignores the penalty values at the end of the array
+    clean_residual = out.residual[:len(ySec)]
+    
+    bestFit = ySec + clean_residual
     resultParams = out.params 
     return resultParams, bestFit
 
@@ -167,8 +205,6 @@ def paramsToArray(params, xSec):
             case 'c': cs.append(params.valuesdict()[param])
             case 'h': heights.append(params.valuesdict()[param])
     parsArr = np.array([wns, areas, fwhms, cs, heights]).T
-    # heights = [float(max(gauss_Area(xSec, *parsArr[i, :]))) for i in range(parsArr.shape[0])]
-    # parsArr = np.column_stack((parsArr, heights))
     return parsArr
 
 #input - array of resulting parameters to add normalized column to (paramsArr), index of the column
@@ -204,13 +240,15 @@ def plotFitCheck(paramsFit, bestFit, xSec, ySec, file, colorList, numPeaks, rep)
         area = paramsFit.valuesdict()[f'p{pkID}_area']   
         fwhm = paramsFit.valuesdict()[f'p{pkID}_fwhm']   
         c = paramsFit.valuesdict()[f'p{pkID}_c']   
+        h = paramsFit.valuesdict()[f'p{pkID}_h']   
         rat = paramsFit.valuesdict()[f'p{pkID}_rat']   
         #apply parameters to gassian to plot individual peak
         onePkFit = gauss_Area(xSec, wn, area, fwhm, c)
         specXFit.plot(xSec, onePkFit, c=colorList[i], linewidth=0.5)
         #adding values to figure
-        plt.figtext(0.1, (-0.05)*i, r'peak ' +str(pkID) +": " +str(round(wn, 2)) +'  area: ' + str(round(area,2)) +' FWHM: ' + str(round(fwhm, 2))+'  c: ' + str(round(c,3)) + '  ratio: ' + str(round(rat,4)))
+        plt.figtext(0.1, (-0.05)*i, r'peak ' +str(pkID) +": " +str(round(wn, 2)) +'  area: ' + str(round(area,2)) +' FWHM: ' + str(round(fwhm, 2))+'  c: ' + str(round(c,3)) + '  h: ' + str(round(h,4)) + '  ratio: ' + str(round(rat,4)))
     specXFit.legend()
+    return figSpecFit
     
 #ACTUAL PROCESS
 def fitOneFolder(
@@ -218,18 +256,23 @@ def fitOneFolder(
         rawDataFolder, 
         blFileNm='PET-baseline-wns-fit.txt',
         normDataFolderNm = "2_normalized",
-        fitOutFolderNm = "3_fit-results-test",
+        fitOutFolderNm = "3_fit-results",
+        fitFigFolderNm = "3a_fit-results-figs",
         startStopList = [['565', '742'],['1517', '1900']],
         normWn = "723",
         totalFiles = 0, 
         fileCounter = 0
         ):
+    
+    folderStartTime = time.perf_counter()   #just for tracking how long it takes to run
+
     sourceFolder = Path(directory)
     rawDataFolder = Path(rawDataFolder)
     
     parentDir = rawDataFolder.absolute().parent 
     normDataFolder = parentDir / normDataFolderNm
     fitOutFolder = parentDir / fitOutFolderNm
+    fitFigFolder = parentDir / fitFigFolderNm
     fitOutFolder.mkdir(parents=True, exist_ok=True)
 
     #get baseline anchor points file. 
@@ -249,11 +292,14 @@ def fitOneFolder(
     for root, dirs, files in os.walk(sourceFolder):
         depth = root.replace(str(directory), '').count(os.sep)
         outputFolder = Path(root.replace(str(normDataFolder), str(fitOutFolder)))
+        outputFigFolder = Path(root.replace(str(normDataFolder), str(fitFigFolder)))
         outputFolder.mkdir(parents=True, exist_ok=True)    
+        outputFigFolder.mkdir(parents=True, exist_ok=True)   
 
         #looping through files in target folder 
         for filename in files: 
-            if filename.endswith('Avg.csv')==False and getPosition(filename)==9:                            #####ONLY DOING POS 1 for TESTING 
+            if filename.endswith('Avg.csv')==False and 'Back' not in filename:                            #####ONLY DOING POS 1 for TESTING 
+                
             #if filename=="20250130_PET-Ch1-Pos2-81h-Air_N723.csv":    #single file for testing 
 
                 wavenumbers, dataSet = getSpecSet(filename, sourceFolder)
@@ -270,13 +316,14 @@ def fitOneFolder(
                         xStartWn = startStopList[j][0]
                         xStopWn = startStopList[j][1]
                         startIndex, stopIndex, xSection, ySection = getSection(wavenumbers, yAll, yZeros, xStartWn, xStopWn)
-                        sectionParams, numberPeaks = peakParameters(xStartWn, xStopWn, parentDir, normWn) #gets parameters from params file
+                        maxHeight = max(ySection)
+                        sectionParams, numberPeaks, ratioConstraints = peakParameters(xStartWn, xStopWn, maxHeight, parentDir, normWn) #gets parameters from params file
                         
-                        outParams, sectionFit = fitSection(xStartWn, xStopWn, xSection, ySection, sectionParams, numberPeaks)
+                        outParams, sectionFit = fitSection(xStartWn, xStopWn, xSection, ySection, sectionParams, ratioConstraints, numberPeaks)
                         resultsArr = paramsToArray(outParams, xSection)
-    #                 if j!=0: #this is just to skip plotting the first setion, 565-742, in the preview window, since this section's fit is relatively straightforward. 
+                        if j!=0: #this is just to skip plotting the first setion, 565-742, in the preview window, since this section's fit is relatively straightforward. 
     #                     #plotFit(initGuess_multi, popt_multi, xSection, ySection, filename)
-                        plotFitCheck(outParams, sectionFit, xSection, ySection, filename, plotColors, numberPeaks, i+1)
+                            fitFig = plotFitCheck(outParams, sectionFit, xSection, ySection, filename, plotColors, numberPeaks, i+1)
                         if j == 0:  #create the array for the fit results (for the first section)
                             allParams = resultsArr
                         else:       #add to the array for the fit results (for all following sections)
@@ -284,22 +331,65 @@ def fitOneFolder(
                  
                     columnsList = ['wavenumbers', 'area (N'+normWn+')', 'FWHM', 'y int','height (N'+normWn+')']   
                 
-                    # #dividing by all areas and adding as new columns
-                    # totalPeaks = allParams.shape[0]
-                    # for ind in range(totalPeaks):
-                    #     allParams, columnsList = divByPeak(allParams, ind, columnsList, peakDict)
+                    #dividing by all areas and adding as new columns
+                    totalPeaks = allParams.shape[0]
+                    for ind in range(totalPeaks):
+                        allParams, columnsList = divByPeak(allParams, ind, columnsList, peakDict)
 
-                    # #adding column headers, making into pandas dataframe for export
-                    # outDf = pd.DataFrame(allParams, columns=columnsList)
+                    #adding column headers, making into pandas dataframe for export
+                    outDf = pd.DataFrame(allParams, columns=columnsList)
                 
-                    # outFilename = filename[:-4].replace(' ', '') + f"-fit_{i+1}.csv"
-                    # outDf.to_csv(outputFolder / outFilename, index=False)
+                    outFilename = filename[:-4].replace(' ', '') + f"-fit_{i+1}.csv"
+                    outFigFilename = outFilename.replace('.csv', '.png')
+                    fitFig.savefig(outputFigFolder / outFigFilename, format='png', dpi=100, transparent=False, bbox_inches='tight')
+                    outDf.to_csv(outputFolder / outFilename, index=False)
 
-                print(f'\r processing {str(fileCounter)} out of {str(totalFiles)} files (replicate {i+1} of {np.size(dataSet, 1)}), {str(round(((fileCounter)/totalFiles *100), 1))}% complete', end=' ')    #prints on one line
+                fileCompleteTime = time.perf_counter()
+                elapsedSeconds = fileCompleteTime - folderStartTime
+                elapsedMinutes = elapsedSeconds / 60
+                print(f'\r processing {str(fileCounter)} out of {str(totalFiles)} files (replicate {i+1} of {np.size(dataSet, 1)}), {str(round(((fileCounter)/totalFiles *100), 1))}% complete, {round(elapsedMinutes, 2)} minutes elapsed', end=' ')    #prints on one line
+    print("Program finished!\\a") 
     return fileCounter
 
+def fitMulti(normDataFolder, rawDataFolder, startExp, stopExp):
+    totalFolders=0
+    totalFiles=0
+    for root, dirs, files in os.walk(normDataFolder): 
+        if len(files)>0 and startExp <= int(root.split('//')[-1].split('-')[-1].replace('h', '')) <= stopExp:
+            totalFolders+=1
+            totalFiles += len(files)
+    totalFiles = totalFiles/2  # removing averages 
+    print(f"total files in batch (not counting replicates): {totalFiles}")
+    
+    currentFolder=0
+    for root, dirs, files in os.walk(normDataFolder): 
+        if len(files)>0 and startExp <= int(root.split('//')[-1].split('-')[-1].replace('h', '')) <= stopExp:
+            print(root)
+            currentFolder+=1
+            print(f"Beginning folder {currentFolder} of {totalFolders}")
+            fitOneFolder(root, rawDataFolder)
 
     
-fitOneFolder("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure-ND-filters/2_normalized/723/chamber-1/20250205-104h", "C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure-ND-filters/0_raw-data")
+#fitOneFolder("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure-ND-filters/2_normalized/723/chamber-1/20250205-104h", "C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-exposure-ND-filters/0_raw-data")
+# fitMulti("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/2_normalized/723", "C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/0_raw-data", 226, 226)
 
+## !! Redo up to 226 hrs to correct bad lower bound on 1745 ratio 
+## done: 277, 327, 400, 564, 605, 694, 759, 871, 1095, 1171, 1290, 1393
+fitMulti("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/2_normalized/723", "C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/0_raw-data", 1681, 1681)
+fitMulti("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/2_normalized/723", "C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/0_raw-data", 2107, 2107)
+
+# ###REDOS
+# fitMulti("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/2_normalized/723", "C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/0_raw-data", 0, 0)
+# fitMulti("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/2_normalized/723", "C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/0_raw-data", 12, 12)
+# fitMulti("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/2_normalized/723", "C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/0_raw-data", 25, 25)
+# fitMulti("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/2_normalized/723", "C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/0_raw-data", 45, 45)
+# fitMulti("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/2_normalized/723", "C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/0_raw-data", 63, 63)
+# fitMulti("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/2_normalized/723", "C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/0_raw-data", 81, 81)
+# fitMulti("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/2_normalized/723", "C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/0_raw-data", 104, 104)
+# fitMulti("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/2_normalized/723", "C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/0_raw-data", 145, 145)
+# fitMulti("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/2_normalized/723", "C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/0_raw-data", 185, 185)
+# fitMulti("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/2_normalized/723", "C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/0_raw-data", 226, 226)
+
+#fitMulti("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/2_normalized/723", "C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/0_raw-data", 605, 605)
+# fitOneFolder("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/2_normalized/723/chamber-5/20250110-0h", "C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/0_raw-data")
 #fitOneFolder("//Cfs2e.nist.gov/73_el/731/internal/CONFOCAL/FS2/Data4/Hsiuchin/reciprocity experiment (3M PET)/FTIR/cutoff 305/KLJ-processing/2_normalized/723/16h", "//cfs2e.nist.gov/73_EL/731/internal/CONFOCAL/FS2/Data4/Hsiuchin/reciprocity experiment (3M PET)/FTIR/cutoff 305/KLJ-processing/0_raw-data")

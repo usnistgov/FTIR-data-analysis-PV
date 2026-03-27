@@ -73,23 +73,50 @@ class ManageSpectrum:
 class BuildParameters:
     def __init__(self, params_file_path):
         self.params_file_path = Path(params_file_path)
+    @property
     def params_table(self):
         # Obtains user-created parameters from specifically-formatted csv file. sets all empty spaces to nan. 
         return np.nan_to_num(np.genfromtxt(self.params_file_path, skip_header=1, delimiter=","), nan=np.nan) 
+    @property
     def peak_count(self):
-        return len(self.params_table()[:,0])
-    def create_params_object(self):
+        return len(self.params_table[:,0])
+    @property
+    def ratio_constraints(self):
+        # the constraints for the peak area to height ratio are stored in a regular array.
+        # lmfit encounters some problems with expression constraints, so they are handled differently within the fitting function. 
+        return self.params_table[:, -3:]
+    
+    def params_object(self):
         # part of lmfit package. See: https://lmfit.github.io/lmfit-py/parameters.html 
         # a dictionary of Parameters objects. 
         fit_params = Parameters() 
 
-        # def mini_param_gen(suffix, index, vary_bool):
-            # local function for parsing params_table into Parameter objects
+        def mini_param_generator(suffix, index, vary_bool):
+            # local function for parsing params_table into Parameter objects. 
+            # Fills with None, -inf, or inf if no value provided.
+            fit_params.add(name = f"p{pk_ID}_{suffix}", vary=vary_bool,
+                           value=self.params_table[i, index] if np.isnan(self.params_table[i,index]) == False else None,
+                           min=self.params_table[i, index-1] if np.isnan(self.params_table[i, index-1]) == False else -np.inf, 
+                           max=self.params_table[i, index+1] if np.isnan(self.params_table[i, index+1]) == False else np.inf)
+
+        for i in range(self.peak_count()):
+            pk_ID = i+1
+            mini_param_generator('wn', 1, True)
+            mini_param_generator('area', 4, True)
+            mini_param_generator('fwhm', 7, True)
+            mini_param_generator('c', 10, False)
+            # bug fit for area = 0 causing height = 0 which then causes zero division error in expression params. 
+            if fit_params[f"p{pk_ID}_area"].min==0:
+                fit_params[f"p{pk_ID}_area"].set(min=0.0001) 
         
-        # the constraints for the peak area to height ratio are stored in a regular array.
-        # lmfit encounters some problems with expression constraints, so they are handled differently within the fitting function. 
-        ratio_constraints = self.params_table()[:, -3:]
-    
+            #add derived parameters 
+            fit_params.add(f"p{pk_ID}_h", vary=False)
+            fit_params[f"p{pk_ID}_h"].expr = f"p{pk_ID}_area / ( (p{pk_ID}_fwhm / (2*sqrt(2*log(2)))) *sqrt(2*pi))"
+        
+            fit_params.add(f"p{pk_ID}_ratio", vary=False)
+            fit_params[f"p{pk_ID}_ratio"].expr = f"p{pk_ID}_area / p{pk_ID}_h"
+        return fit_params
+            
 
 # Local file management: finding files and extracting np array.
 source_folder = Path("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/2_normalized/723/chamber-5/20250110-0h")
@@ -113,5 +140,5 @@ y_data_import = data_set[:,0]
 #     low_x_bound=1517, hi_x_bound=1900)
 
 build_params = BuildParameters(params_path)
-print(build_params.peak_count())
+print(build_params.peak_count)
 

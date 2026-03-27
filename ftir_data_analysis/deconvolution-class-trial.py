@@ -8,6 +8,7 @@ import os
 import numpy as np
 from scipy.signal import find_peaks as find_peaks
 from lmfit import Parameters, Minimizer 
+import math
 
 #grabs group of 4 spectra and splits into wavenumber and data columns
 #input: fileNm (file name of spectra set, output by pre-processing scripts)
@@ -36,7 +37,7 @@ class ManageSpectrum:
         self.low_x_bound = low_x_bound
         self.hi_x_bound = hi_x_bound
     
-    def get_section(self):
+    def get_section_indices(self):
         # Attempts to pick a good index to slice the spectrum on with the given constraints.
         # First, check to see if there are input values to slice at for either boundary.
         if self.low_x_bound is not -np.inf or self.hi_x_bound is not np.inf: 
@@ -64,11 +65,14 @@ class ManageSpectrum:
             hi_x_index  = min(minima_indices, key=lambda x:abs(float(self.hi_x_bound)-self.x_all[x]))
             if abs(self.x_all[hi_x_index] - float(self.hi_x_bound)) > 20:                                       
                 hi_x_index = min(np.indices(self.x_all.shape)[0], key=lambda x:abs(float(self.hi_x_bound)-self.x_all[x]))
-        
-        # Once indices are found, breaking into sections is simple. 
-        x_section = self.x_all[low_x_index:hi_x_index+1]
-        y_section = self.y_all[low_x_index:hi_x_index+1]
-        return x_section, y_section
+        return low_x_index, hi_x_index
+    @property
+    def x_section(self):   
+    # Once indices are found, breaking into sections is simple.         
+        return self.x_all[self.get_section_indices()[0]:self.get_section_indices()[1]+1]
+    @property
+    def y_section(self):    
+        return self.y_all[self.get_section_indices()[0]:self.get_section_indices()[1]+1]
     
 class BuildParameters:
     def __init__(self, params_file_path):
@@ -99,8 +103,9 @@ class BuildParameters:
                            min=self.params_table[i, index-1] if np.isnan(self.params_table[i, index-1]) == False else -np.inf, 
                            max=self.params_table[i, index+1] if np.isnan(self.params_table[i, index+1]) == False else np.inf)
 
-        for i in range(self.peak_count()):
+        for i in range(self.peak_count):
             pk_ID = i+1
+            # parse the parameters table file for constraints and add them to the Parameter dictionary 
             mini_param_generator('wn', 1, True)
             mini_param_generator('area', 4, True)
             mini_param_generator('fwhm', 7, True)
@@ -109,14 +114,70 @@ class BuildParameters:
             if fit_params[f"p{pk_ID}_area"].min==0:
                 fit_params[f"p{pk_ID}_area"].set(min=0.0001) 
         
-            #add derived parameters 
+            #add derived parameters: height (h) and area/height ratio (ratio)
             fit_params.add(f"p{pk_ID}_h", vary=False)
             fit_params[f"p{pk_ID}_h"].expr = f"p{pk_ID}_area / ( (p{pk_ID}_fwhm / (2*sqrt(2*log(2)))) *sqrt(2*pi))"
         
             fit_params.add(f"p{pk_ID}_ratio", vary=False)
             fit_params[f"p{pk_ID}_ratio"].expr = f"p{pk_ID}_area / p{pk_ID}_h"
         return fit_params
+
+# class PostProcessing:
+#     def __init__(self, result_params, x_section):
+#         self.result_params = result_params
+
+# custom gaussian function, though lmfit has built in models for gaussian, lorentzian, voight, etc that could be implemented if desired. 
+def gauss_Area(x, wn, area, fwhm, c):
+    return c + area/(fwhm*math.sqrt(math.pi/(4*math.log(2)))) * np.exp(-4*math.log(2)*(x-wn)**2/(fwhm**2)) 
+
+# the main course
+def sharpness_fit(x_section, y_section, params, ratio_constraints, peak_count, multipler):
+    print(type(params))
+    
+    def residual(pars, x, data, peak_count):
+        # local function for minimizer 
+        # building model
+        model = np.zeros_like(x)
+        # this uses a penalty method to enforce constraints that lmfit otherwise does not prioritize
+        # (constraints on expressions)
+        total_penalty = []
+        # penalty scale is based on max value of y data. Set multiplier through testing. 
+        penalty_scale = np.max(data) * multipler 
+        # Force refresh of expression-based parameters
+        _ = pars.valuesdict()
+
+        for i in range(peak_count):
+            pk_ID = i+1 
+            # collect individual parameters objects by name from Parameters dictionary 
+            wn, area, fwhm, c = pars[f'p{pk_ID}_wn'], pars[f'p{pk_ID}_area'], pars[f'p{pk_ID}_fwhm'], pars[f'p{pk_ID}_c']
+            # penalty method used to prevent dependent parameters being ignored. 
+            # get min and max from array pulled from csv: 
+            ratio_min, ratio_max = ratio_constraints[i, 0], ratio_constraints[i, 2]
+            # get value being held in parameter at current iteration
+            ratio_val = pars[f'p{pk_ID}_ratio'].value
             
+
+            """this section needs comments edited"""
+            # using np.maximum reduces number of if statements in loop and leaves penalties "vectorized" according to gemini which is supposed to be faster
+            if np.isfinite(ratio_max):   
+                total_penalty.append(np.maximum(0, ratio_val - ratio_max)**2 * penalty_scale)   
+            if np.isfinite(ratio_min):
+                total_penalty.append(np.maximum(0, ratio_min - ratio_val)**2 * penalty_scale)
+
+            #add peak to model (external function)
+            model += gauss_Area(x, wn, area, fwhm, c)
+
+        return np.concatenate([(model - data), total_penalty])  #concatenate allegedly runs faster here than regular add. 
+    
+    # see lmfit documentation - standard implementation. 
+    mini = Minimizer(residual, params, fcn_args=(x_section, y_section, peak_count))
+    out = mini.minimize(method='leastsq')     #leastsq: Levenberg-Marquardt (default)
+    
+    # removes the penalty values at the end of the residual array for the final output residual
+    clean_residual = out.residual[:len(y_section)]
+    best_fit = y_section + clean_residual
+    result_params = out.params 
+    return result_params, best_fit
 
 # Local file management: finding files and extracting np array.
 source_folder = Path("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/2_normalized/723/chamber-5/20250110-0h")
@@ -134,11 +195,15 @@ params_path = parent_directory / "peak-params_1517-1900-N723-lmfit.csv"
 
 y_data_import = data_set[:,0]
 
-# spectrum = ManageSpectrum(
-#     x_data_import, y_data_import, 
-#     spec_bl_points=baseline_points, 
-#     low_x_bound=1517, hi_x_bound=1900)
+spectrum = ManageSpectrum(
+    x_data_import, y_data_import, 
+    spec_bl_points=baseline_points, 
+    low_x_bound=1517, hi_x_bound=1900)
 
 build_params = BuildParameters(params_path)
-print(build_params.peak_count)
 
+output_parameters, section_fit = sharpness_fit(spectrum.x_section, spectrum.y_section, 
+                                               build_params.params_object(), build_params.ratio_constraints, 
+                                               build_params.peak_count, 2)
+
+print(output_parameters.pretty_print())

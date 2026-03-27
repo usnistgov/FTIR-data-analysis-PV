@@ -7,7 +7,7 @@ from pathlib import Path
 import os
 import numpy as np
 from scipy.signal import find_peaks as find_peaks
-
+from lmfit import Parameters, Minimizer 
 
 #grabs group of 4 spectra and splits into wavenumber and data columns
 #input: fileNm (file name of spectra set, output by pre-processing scripts)
@@ -74,10 +74,21 @@ class BuildParameters:
     def __init__(self, params_file_path):
         self.params_file_path = Path(params_file_path)
     def params_table(self):
-        # obtains user-created parameters from specifically-formatted csv file. sets all empty spaces to nan. 
+        # Obtains user-created parameters from specifically-formatted csv file. sets all empty spaces to nan. 
         return np.nan_to_num(np.genfromtxt(self.params_file_path, skip_header=1, delimiter=","), nan=np.nan) 
-    def peak_count(self)
+    def peak_count(self):
+        return len(self.params_table()[:,0])
+    def create_params_object(self):
+        # part of lmfit package. See: https://lmfit.github.io/lmfit-py/parameters.html 
+        # a dictionary of Parameters objects. 
+        fit_params = Parameters() 
+
+        # def mini_param_gen(suffix, index, vary_bool):
+            # local function for parsing params_table into Parameter objects
         
+        # the constraints for the peak area to height ratio are stored in a regular array.
+        # lmfit encounters some problems with expression constraints, so they are handled differently within the fitting function. 
+        ratio_constraints = self.params_table()[:, -3:]
     
 
 # Local file management: finding files and extracting np array.
@@ -102,5 +113,5 @@ y_data_import = data_set[:,0]
 #     low_x_bound=1517, hi_x_bound=1900)
 
 build_params = BuildParameters(params_path)
-print(build_params.params_table())
+print(build_params.peak_count())
 

@@ -9,6 +9,15 @@ import numpy as np
 from scipy.signal import find_peaks as find_peaks
 from lmfit import Parameters, Minimizer 
 import math
+import time 
+import colorsys
+import matplotlib.pyplot as plt
+
+"""
+TO-DO
+-remove references to wavenumbers and replace with generic x data label
+-some class functions could be attributes assigned under __init__ instead of methods - cleaner 
+"""
 
 #grabs group of 4 spectra and splits into wavenumber and data columns
 #input: fileNm (file name of spectra set, output by pre-processing scripts)
@@ -77,18 +86,13 @@ class ManageSpectrum:
 class BuildParameters:
     def __init__(self, params_file_path):
         self.params_file_path = Path(params_file_path)
-    @property
-    def params_table(self):
         # Obtains user-created parameters from specifically-formatted csv file. sets all empty spaces to nan. 
-        return np.nan_to_num(np.genfromtxt(self.params_file_path, skip_header=1, delimiter=","), nan=np.nan) 
-    @property
-    def peak_count(self):
-        return len(self.params_table[:,0])
-    @property
-    def ratio_constraints(self):
+        self.params_table = np.nan_to_num(np.genfromtxt(self.params_file_path, skip_header=1, delimiter=","), nan=np.nan) 
+        self.peak_count = len(self.params_table[:,0])
         # the constraints for the peak area to height ratio are stored in a regular array.
         # lmfit encounters some problems with expression constraints, so they are handled differently within the fitting function. 
-        return self.params_table[:, -3:]
+        self.ratio_constraints = self.params_table[:, -3:]
+        self.peak_dict = {i : str(self.params_table[:,1][i].astype(int)) for i in range(len(self.params_table[:,1]))}
     
     def params_object(self):
         # part of lmfit package. See: https://lmfit.github.io/lmfit-py/parameters.html 
@@ -122,42 +126,98 @@ class BuildParameters:
             fit_params[f"p{pk_ID}_ratio"].expr = f"p{pk_ID}_area / p{pk_ID}_h"
         return fit_params
 
-# class PostProcessing:
-#     def __init__(self, result_params, x_section):
-#         self.result_params = result_params
+    # def peak_dict(self):
+    #     return {i : str(self.params_table[:,1][i].astype(int)) for i in range(len(self.params_table[:,1]))}
+"""
+post processing also needs better commenting 
+"""
+class PostProcessing:
+    def __init__(self, result_params, x_section, y_section, best_fit, x_label, plot_title, peak_dict, peak_count):
+        # results parameter from sharpness_fit
+        self.result_params = result_params
+        # user input label for x data (wavenumbers for FTIR)
+        self.x_label = str(x_label) 
+        self.plot_title = str(plot_title)
+        self.peak_dict = peak_dict 
+        self.x_section = x_section
+        self.y_section = y_section
+        # self.columns_list = [self.x_label, 'area', 'FWHM', 'y int', 'height']
+        self.best_fit = best_fit
+        self.param_vals = self.result_params.valuesdict()
+    
+    def params_array(self):
+        # parsing results Parameters dictionary into human-readable/exportable array 
+        wns, areas, fwhms, cs, heights = [], [], [], [], []
+        for param in self.result_params.valuesdict():
+            param_type = param.split("_")[1]
+            match param_type:
+                case 'wn': wns.append(self.param_vals[param])
+                case 'area': areas.append(self.param_vals[param])
+                case 'fwhm': fwhms.append(self.param_vals[param])
+                case 'c': cs.append(self.param_vals[param])
+                case 'h': heights.append(self.param_vals[param])
+        return np.array([wns, areas, fwhms, cs, heights]).T
+    
+    @property
+    def plot_colors(self):
+        # color generation: https://stackoverflow.com/questions/876853/generating-color-ranges-in-python 
+        hls_tups = [(x/self.peak_count, 0.4, 1) for x in range(self.peak_count)]
+        rgb_tups = list(map(lambda x: colorsys.hls_to_rgb(*x), hls_tups))
+        return rgb_tups
+    
+    def plot_fit(self):
+        # result_params, best_fit x_section, y_section, 
+        figure, fit_plot = plt.subplots(figsize=(10, 5))
+        plt.title(f"{self.plot_title}")
+        # plot original input spectrum 
+        fit_plot.plot(self.x_section, self.y_section, c='black', label='spectrum', linewidth=0.5)
+        # plot full fit spectrum on top in red 
+        fit_plot.plot(self.x_section, self.best_fit, c='red', label='fit', linewidth=0.5)
+        for i in range(self.peak_count):
+            pk_ID = i+1
+            h = self.param_vals[f'p{pk_ID}_h'] 
+            ratio = self.param_vals[f'p{pk_ID}_ratio'] 
+            # input final parameter values into function to create one peak 
+            single_peak = gauss_area(self.x_section, 
+                                      self.param_vals[f'p{pk_ID}_wn'],
+                                      self.param_vals[f'p{pk_ID}_area'],    
+                                      self.param_vals[f'p{pk_ID}_fwhm'],
+                                      self.param_vals[f'p{pk_ID}_c'])
+            fit_plot.plot(self.x_section, single_peak, c=self.plot_colors[i], linewidth=0.5)
 
 # custom gaussian function, though lmfit has built in models for gaussian, lorentzian, voight, etc that could be implemented if desired. 
-def gauss_Area(x, wn, area, fwhm, c):
+def gauss_area(x, wn, area, fwhm, c):
     return c + area/(fwhm*math.sqrt(math.pi/(4*math.log(2)))) * np.exp(-4*math.log(2)*(x-wn)**2/(fwhm**2)) 
 
 # the main course
-def sharpness_fit(x_section, y_section, params, ratio_constraints, peak_count, multipler):
-    print(type(params))
-    
+def sharpness_fit(x_section, y_section, params, ratio_constraints, peak_count, multiplier):
     def residual(pars, x, data, peak_count):
         # local function for minimizer 
+        # unpacking parameters dictionary at top of function per: https://lmfit.github.io/lmfit-py/fitting.html 
+        param_vals = pars.valuesdict()
         # building model
         model = np.zeros_like(x)
         # this uses a penalty method to enforce constraints that lmfit otherwise does not prioritize
         # (constraints on expressions)
         total_penalty = []
         # penalty scale is based on max value of y data. Set multiplier through testing. 
-        penalty_scale = np.max(data) * multipler 
-        # Force refresh of expression-based parameters
-        _ = pars.valuesdict()
+        penalty_scale = np.max(data) * multiplier
+
 
         for i in range(peak_count):
             pk_ID = i+1 
-            # collect individual parameters objects by name from Parameters dictionary 
-            wn, area, fwhm, c = pars[f'p{pk_ID}_wn'], pars[f'p{pk_ID}_area'], pars[f'p{pk_ID}_fwhm'], pars[f'p{pk_ID}_c']
+            # collect individual parameters by name from Parameters dictionary 
+            wn, area, fwhm, c = param_vals[f'p{pk_ID}_wn'], param_vals[f'p{pk_ID}_area'], param_vals[f'p{pk_ID}_fwhm'], param_vals[f'p{pk_ID}_c']
+
             # penalty method used to prevent dependent parameters being ignored. 
             # get min and max from array pulled from csv: 
             ratio_min, ratio_max = ratio_constraints[i, 0], ratio_constraints[i, 2]
-            # get value being held in parameter at current iteration
-            ratio_val = pars[f'p{pk_ID}_ratio'].value
+            # get value being held in parameter at current iteration from unpacked dictionary
+            ratio_val = param_vals[f'p{pk_ID}_ratio']
             
 
-            """this section needs comments edited"""
+            """this section needs comments edited
+            here to end of sharpness_fit function"""
             # using np.maximum reduces number of if statements in loop and leaves penalties "vectorized" according to gemini which is supposed to be faster
             if np.isfinite(ratio_max):   
                 total_penalty.append(np.maximum(0, ratio_val - ratio_max)**2 * penalty_scale)   
@@ -165,7 +225,7 @@ def sharpness_fit(x_section, y_section, params, ratio_constraints, peak_count, m
                 total_penalty.append(np.maximum(0, ratio_min - ratio_val)**2 * penalty_scale)
 
             #add peak to model (external function)
-            model += gauss_Area(x, wn, area, fwhm, c)
+            model += gauss_area(x, wn, area, fwhm, c)
 
         return np.concatenate([(model - data), total_penalty])  #concatenate allegedly runs faster here than regular add. 
     
@@ -178,6 +238,10 @@ def sharpness_fit(x_section, y_section, params, ratio_constraints, peak_count, m
     best_fit = y_section + clean_residual
     result_params = out.params 
     return result_params, best_fit
+
+"""
+-------------------------------------------------------------------------------
+"""
 
 # Local file management: finding files and extracting np array.
 source_folder = Path("C:/Users/klj/OneDrive - NIST/Projects/PV-Project/Reciprocity/FTIR-data-PET-ND-filters-ATR-corr/2_normalized/723/chamber-5/20250110-0h")
@@ -195,15 +259,40 @@ params_path = parent_directory / "peak-params_1517-1900-N723-lmfit.csv"
 
 y_data_import = data_set[:,0]
 
-spectrum = ManageSpectrum(
-    x_data_import, y_data_import, 
-    spec_bl_points=baseline_points, 
-    low_x_bound=1517, hi_x_bound=1900)
+
+file_start_time = time.perf_counter()
+
+spectrum = ManageSpectrum(x_data_import, y_data_import, 
+                          spec_bl_points=baseline_points, 
+                          low_x_bound=1517, hi_x_bound=1900)
 
 build_params = BuildParameters(params_path)
 
+
 output_parameters, section_fit = sharpness_fit(spectrum.x_section, spectrum.y_section, 
                                                build_params.params_object(), build_params.ratio_constraints, 
-                                               build_params.peak_count, 2)
+                                               build_params.peak_count, 0)
 
-print(output_parameters.pretty_print())
+print(build_params.params_object().pretty_print())
+results = PostProcessing(output_parameters, spectrum.x_section, spectrum.y_section, section_fit,
+                         'wavenumbers', filename, 
+                         build_params.peak_dict, build_params.peak_count)
+
+
+file_time_seconds = time.perf_counter() - file_start_time
+file_time_stamp = f"fit time: {round(file_time_seconds, 2)} seconds"
+
+results.plot_fit()
+
+plot_time_seconds = time.perf_counter() - file_start_time - file_time_seconds
+plot_time_stamp = f"plot time: {round(plot_time_seconds, 2)} seconds"
+print(file_time_stamp)
+print(plot_time_stamp)
+
+# time stamping 
+
+
+# elapsed_seconds = file_end_time - file_start_time 
+# elapsed_minutes = elapsed_seconds / 60 
+# time_stamp = f"{round(elapsed_seconds, 2)} seconds"
+# print(f"processing time: {time_stamp}")
